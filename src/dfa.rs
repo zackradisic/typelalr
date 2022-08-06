@@ -14,7 +14,8 @@ use crate::{
 pub struct DFA {
     pub edges: Vec<Edge>,
     pub states: Vec<State>,
-    pub accepting_states: Vec<StateIdx>,
+    dfa_to_nfa: BTreeMap<StateIdx, BTreeSet<StateIdx>>,
+    accepting_states: BTreeSet<StateIdx>,
 }
 
 #[derive(Clone, Debug)]
@@ -33,14 +34,47 @@ pub struct Edge {
 #[derive(Clone, Debug)]
 pub struct State {
     first_edge: OptionUsize<usize>,
-    /// `true` when this is a state that accepts the entire NFA
-    pub is_accept: bool,
+    // If this state is accepting, this is an index into a list containing the set of NFA states
+    // this DFA state represents, so that it may be consulted to see which NFA states it accepts.
+    // accepting_states_idx: OptionUsize<usize>,
 }
 
 impl DFA {
     pub const START_IDX: StateIdx = StateIdx(0);
 
-    pub fn from_nfa(nfa: NFA) -> (Self, BTreeMap<StateIdx, StateIdx>) {
+    pub fn accepting_states(&self) -> BTreeMap<StateIdx, Vec<StateIdx>> {
+        let mut ret = BTreeMap::<StateIdx, Vec<StateIdx>>::new();
+
+        for (dfa_state, nfa_set) in self.dfa_to_nfa.iter() {
+            for nfa_state_idx in nfa_set
+                .iter()
+                .filter(|idx| self.accepting_states.contains(idx))
+            {
+                match ret.entry(*dfa_state) {
+                    std::collections::btree_map::Entry::Vacant(mut entry) => {
+                        entry.insert(vec![*nfa_state_idx]);
+                    }
+                    std::collections::btree_map::Entry::Occupied(mut entry) => {
+                        entry.get_mut().push(*nfa_state_idx);
+                    }
+                }
+            }
+        }
+
+        ret
+    }
+
+    // pub fn accepting_state(&self, state_idx: usize) -> Option<StateIdx> {
+    //     match self.dfa_to_nfa.get(&StateIdx(state_idx)) {
+    //         Some(set) => set
+    //             .iter()
+    //             .find(|nfa_state_idx| self.accepting_states.contains(nfa_state_idx))
+    //             .cloned(),
+    //         None => None,
+    //     }
+    // }
+
+    pub fn from_nfa(nfa: NFA) -> Self {
         let alphabet = nfa.labels();
         let mut set = BTreeSet::new();
         for label in alphabet {
@@ -72,7 +106,7 @@ impl DFA {
             }
         }
 
-        if self.accepting_states.contains(&state_idx) {
+        if self.dfa_to_nfa.contains_key(&state_idx) {
             Some(eaten)
         } else {
             None
@@ -90,24 +124,6 @@ impl DFA {
             state: state_idx,
             edge_idx,
         })
-    }
-
-    pub fn shift_state_and_edges(&mut self, state_offset: usize, edge_offset: usize) {
-        for state in &mut self.states {
-            let first_edge = &mut state.first_edge;
-            if first_edge.is_some() {
-                *first_edge = OptionUsize::some(first_edge.unwrap() + edge_offset);
-            }
-        }
-
-        for edge in &mut self.edges {
-            edge.from = StateIdx(edge.from.0 + state_offset);
-            edge.to = StateIdx(edge.to.0 + state_offset);
-        }
-
-        for state in &mut self.accepting_states {
-            *state = StateIdx(state.0 + state_offset);
-        }
     }
 }
 
@@ -128,17 +144,13 @@ impl DFABuilder {
     }
 
     // This is the algorithm described in chapter 3.7.1 of the dragon book
-    pub fn build(mut self, nfa: &NFA, alphabet: Vec<Match>) -> (DFA, BTreeMap<StateIdx, StateIdx>) {
-        // let mut d_states = vec![nfa.epsilon_closure([NFA::START_IDX].into())];
+    pub fn build(mut self, nfa: &NFA, alphabet: Vec<Match>) -> DFA {
+        let mut first_edges: Vec<OptionUsize<usize>> = vec![];
+        let mut marks = BitVec::from_elem(1, false);
         let mut d_states = vec![Self::hashset_to_btreeset(
             nfa.epsilon_closure([NFA::START_IDX].into()),
         )];
-        // let mut d_states: BTreeMap<usize, BTreeSet<StateIdx>> = BTreeMap::from([(
-        //     0,
-        //     Self::hashset_to_btreeset(nfa.epsilon_closure([NFA::START_IDX].into())),
-        // )]);
-        let mut first_edges: Vec<OptionUsize<usize>> = vec![];
-        let mut marks = BitVec::from_elem(1, false);
+        let mut dfa_to_nfa = BTreeMap::new();
 
         loop {
             // Loop while there is an unmarked state set
@@ -152,26 +164,36 @@ impl DFABuilder {
 
             first_edges.push(OptionUsize::none());
 
+            // Loop through each possible edge match
             for label in &alphabet {
+                // Compute the set of NFA states we are in
                 let u = Self::epsilon_closure(nfa, Self::move_set(nfa, &d_states[t_idx], label));
                 if u.is_empty() {
                     continue;
                 }
+
+                // Get the idx of this set of NFA states
                 let idx = match d_states.iter().enumerate().find(|(_, s)| *s == &u) {
                     Some((i, _)) => i,
                     None => {
+                        // If not found add it
                         marks.push(false);
                         let new_idx = d_states.len();
-                        d_states.push(u);
+                        d_states.push(u.clone());
+
+                        dfa_to_nfa.insert(StateIdx(new_idx), u);
+
                         new_idx
                     }
                 };
 
+                // Set first edge if need be
                 let first_edge = &mut first_edges[t_idx];
                 if first_edge.is_none() {
-                    // *first_edge = OptionUsize::some(idx);
                     *first_edge = OptionUsize::some(self.edges.len());
                 }
+
+                // Push edge
                 self.edges.push(Edge {
                     from: StateIdx(t_idx),
                     label: label.clone(),
@@ -182,34 +204,19 @@ impl DFABuilder {
 
         let accepting_states = nfa.accepting_states();
         let mut final_states = Vec::with_capacity(d_states.capacity());
-        let mut nfa_to_dfa_mapping = BTreeMap::new();
-        for (i, states) in d_states.iter().enumerate() {
-            for s in states.iter() {
-                if accepting_states.contains(s) {
-                    nfa_to_dfa_mapping.insert(*s, StateIdx(i));
-                }
-            }
-        }
 
         for (i, states) in d_states.into_iter().enumerate() {
             final_states.push(State {
                 first_edge: first_edges[i],
-                is_accept: states.iter().any(|s| accepting_states.contains(s)),
             })
         }
 
-        (
-            DFA {
-                edges: self.edges,
-                accepting_states: final_states
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(i, s)| if s.is_accept { Some(StateIdx(i)) } else { None })
-                    .collect(),
-                states: final_states,
-            },
-            nfa_to_dfa_mapping,
-        )
+        DFA {
+            edges: self.edges,
+            dfa_to_nfa,
+            states: final_states,
+            accepting_states,
+        }
     }
 
     fn epsilon_closure(nfa: &NFA, mut set: BTreeSet<StateIdx>) -> BTreeSet<StateIdx> {
@@ -361,9 +368,10 @@ mod test {
     fn sanity() {
         let hir = Parser::new().parse("a*ab").unwrap();
         let nfa = NFA::from_regex(&hir);
-        let (dfa, _) = DFA::from_nfa(nfa);
+        let dfa = DFA::from_nfa(nfa);
 
         assert!(dfa.test("aaaaaab"));
+        assert!(dfa.test("ab"));
         assert!(!dfa.test("b"))
     }
 
@@ -371,7 +379,7 @@ mod test {
     fn sanity2() {
         let hir = Parser::new().parse("(fuck)*fuckyou").unwrap();
         let nfa = NFA::from_regex(&hir);
-        let (dfa, _) = DFA::from_nfa(nfa);
+        let dfa = DFA::from_nfa(nfa);
 
         assert!(dfa.test("fuckfuckyou"));
         assert!(!dfa.test("fuckkkk"))
@@ -381,7 +389,7 @@ mod test {
     fn sanity3() {
         let hir = Parser::new().parse("(f|u|c|k)*fuckyou").unwrap();
         let nfa = NFA::from_regex(&hir);
-        let (dfa, _) = DFA::from_nfa(nfa);
+        let dfa = DFA::from_nfa(nfa);
 
         assert!(dfa.test("fffuuuucccckkkfuckyou"));
         assert!(dfa.test("fuckkkkfuckyou"));
@@ -396,7 +404,7 @@ mod test {
     fn sanity4() {
         let hir = Parser::new().parse("q").unwrap();
         let nfa = NFA::from_regex(&hir);
-        let (dfa, _) = DFA::from_nfa(nfa);
+        let dfa = DFA::from_nfa(nfa);
 
         assert!(dfa.test("q"));
 
@@ -409,8 +417,24 @@ mod test {
     fn number() {
         let hir = Parser::new().parse("[0-9]+").unwrap();
         let nfa = NFA::from_regex(&hir);
-        let (dfa, _) = DFA::from_nfa(nfa);
+        let dfa = DFA::from_nfa(nfa);
 
         assert_eq!(dfa.simulate("420"), Some(3));
+    }
+
+    #[test]
+    fn optional() {
+        let hir = Parser::new().parse("a?bcd").unwrap();
+
+        let nfa = NFA::from_regex(&hir);
+        let dfa = DFA::from_nfa(nfa);
+
+        assert!(dfa.test("bcd"));
+
+        assert!(dfa.test("abcd"));
+        assert!(!dfa.test("aaaabcd"));
+        assert!(!dfa.test("aaaaaaabcd"));
+
+        assert!(!dfa.test("cbcd"));
     }
 }
