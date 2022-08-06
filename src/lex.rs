@@ -40,7 +40,6 @@ impl Lex {
 
         for (tok, nfa) in tokens_with_nfa.iter_mut() {
             for accepting_state_idx in nfa.accepting_states() {
-                println!("LOL: {:?} {:?}", accepting_state_idx, state_offset);
                 // TODO: This clone seems costly
                 tokens_map.insert(StateIdx(accepting_state_idx.0 + state_offset), tok.clone());
             }
@@ -58,7 +57,6 @@ impl Lex {
             }
         }
 
-        println!("NFA: {:?}\n\n", lex_nfa.accepting_states());
         let dfa = DFA::from_nfa(lex_nfa);
 
         Self {
@@ -131,10 +129,7 @@ impl Lex {
             }
         }
 
-        if let Some((last_accepting_idx, last_accepting_state_idx)) = last_accepting_state {
-            // tokens.push(self.tokens.get(&last_accepting_state_idx).unwrap().clone());
-            println!("LAST: {:?} {:?}", last_accepting_state_idx, self.tokens);
-
+        if let Some((_last_accepting_idx, last_accepting_state_idx)) = last_accepting_state {
             tokens.push(self.tokens.get(&last_accepting_state_idx).unwrap().clone());
         }
 
@@ -187,15 +182,35 @@ mod test {
     }
 
     #[test]
-    fn lex2() {
-        let tokens = vec![
-            new_token("a", "a"),
-            new_token("abb", "abb"),
-            new_token("a*b+", "a*b+"),
-        ];
-        let lexer = Lex::from_tokens(tokens);
+    fn precedence_longest() {
+        let tokens = vec![new_token("abbb", "abbb"), new_token("a*b+", "a*b+")];
+        let lexer = Lex::from_tokens(tokens.clone());
+        let toks = lexer.lex("abbbbbbb");
 
+        assert_eq!(toks[0], tok("a*b+"));
+    }
+
+    #[test]
+    fn precedence_tie() {
+        let mut tokens = vec![
+            new_token("a*b+", "a*b+"),
+            new_token("a*b*", "a*b*"),
+            new_token("abbb", "abbb"),
+        ];
+        let lexer = Lex::from_tokens(tokens.clone());
         let toks = lexer.lex("abbb");
-        println!("toks {:?}", toks);
+        assert_eq!(toks[0], tok("a*b+"));
+
+        // "a*b*" is first now
+        tokens.swap(0, 1);
+        let lexer = Lex::from_tokens(tokens.clone());
+        let toks = lexer.lex("abbb");
+        assert_eq!(toks[0], tok("a*b*"));
+
+        // "abbb" is first now
+        tokens.swap(0, 2);
+        let lexer = Lex::from_tokens(tokens);
+        let toks = lexer.lex("abbb");
+        assert_eq!(toks[0], tok("abbb"))
     }
 }

@@ -111,7 +111,6 @@ impl NFA {
                 accept,
             ),
             HirKind::Class(class) => {
-                println!("CLASS {:?}", class);
                 let ranges: Vec<Match> = match class {
                     Class::Unicode(class) => class
                         .ranges()
@@ -576,8 +575,6 @@ mod test {
         let nfa = NFA::from_regex(&hir);
 
         assert!(nfa.simulate("lolfucku✅"));
-        println!("{:#?}", nfa);
-        println!("{:#?}", nfa.simulate("lolfucku✅"));
     }
 
     #[test]
