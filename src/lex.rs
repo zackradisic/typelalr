@@ -2,7 +2,7 @@ use regex_syntax::hir::Hir as RegexHir;
 use std::collections::BTreeMap;
 
 use crate::{
-    dfa::DFA,
+    dfa::{self, Edge, DFA},
     nfa::{StateIdx, NFA},
     option_usize::OptionUsize,
 };
@@ -124,9 +124,35 @@ impl Lex {
 
         let mut char_vec: Vec<char> = Vec::with_capacity(256);
 
-        while forward < chars.len() {
+        loop {
+            if forward >= chars.len() {
+                // Need to backtrack for some regular expressions:
+                //     e.g. `".*"` against input `"Stuff" foo`
+                //
+                // This will search the entire string because the chars after `"Stuff"` technically match, it's not until the end of the
+                // string do we realize there is no final `"` so we backtrack to `"Stuff"`
+                //
+                // This kind of sucks though, won't it reach exponential complexity?
+                match last_accepting_state.take() {
+                    Some((last_accepting_idx, last_accepting_state_idx)) => {
+                        tokens.push(self.make_tok(
+                            input,
+                            lexeme_begin,
+                            last_accepting_idx,
+                            last_accepting_state_idx,
+                        ));
+                        lexeme_begin = last_accepting_idx + 1;
+                        forward = last_accepting_idx + 1;
+                        state_idx = StateIdx(0);
+                        if forward >= chars.len() {
+                            break;
+                        }
+                    }
+                    None => break,
+                }
+            }
+
             let c = chars[forward];
-            println!("CHAR {}", c);
 
             let matching_edge = match self.dfa.edge_iter(state_idx) {
                 Some(mut edge_iter) => edge_iter.find(|edge| edge.label.matches(c)),
@@ -136,7 +162,6 @@ impl Lex {
             match matching_edge {
                 Some(edge) => {
                     if let Some(nfa_set) = self.accepting_dfa_to_nfa.get(&edge.to) {
-                        println!("  Accepted");
                         last_accepting_state = Some((forward, *nfa_set.first().unwrap()));
                     }
                     state_idx = edge.to;
@@ -147,12 +172,6 @@ impl Lex {
                     if let Some((last_accepting_idx, last_accepting_state_idx)) =
                         last_accepting_state
                     {
-                        println!("  Pushing tok");
-
-                        println!(
-                            "  Match {}",
-                            input[lexeme_begin..(last_accepting_idx + 1)].to_string()
-                        );
                         let tok = self.make_tok(
                             input,
                             lexeme_begin,
@@ -167,7 +186,6 @@ impl Lex {
 
                         last_accepting_state = None;
                     } else if Self::is_whitespace(c) && forward == lexeme_begin {
-                        println!("  Skip ws");
                         forward += 1;
                         lexeme_begin += 1;
                     } else {
@@ -175,19 +193,6 @@ impl Lex {
                     }
                 }
             }
-        }
-
-        if let Some((_last_accepting_idx, last_accepting_state_idx)) = last_accepting_state {
-            println!(
-                "  Match {}",
-                input[lexeme_begin..(_last_accepting_idx + 1)].to_string()
-            );
-            tokens.push(self.make_tok(
-                input,
-                lexeme_begin,
-                _last_accepting_idx,
-                last_accepting_state_idx,
-            ));
         }
 
         tokens
@@ -406,12 +411,22 @@ mod test {
         let toks = lexer.lex("(print \"Stuff\" (+ 400 20) (- 70.0 1.0))");
 
         println!("TOKS: {:#?}", toks);
-        let [_let, foo, eq, _420, semi]: &[Token; 5] = toks.as_slice().try_into().unwrap();
+        let [lparen1, print, stuff, lparen2, plus, n400, n20, rparen2, lparen3, minus, f70, f1, rparen3, rparen1]: &[Token; 14] = toks.as_slice().try_into().unwrap();
 
-        assert_eq!(_let, &tok("let"));
-        assert_eq!(foo, &tok_val("identifier", "foo"));
-        assert_eq!(eq, &tok("="));
-        assert_eq!(_420, &tok_val("number", "420"));
-        assert_eq!(semi, &tok(";"));
+        for paren in [lparen1, lparen2, lparen3] {
+            assert_eq!(paren, &tok("("));
+        }
+        for paren in [rparen1, rparen2, rparen3] {
+            assert_eq!(paren, &tok(")"));
+        }
+
+        assert_eq!(print, &tok_val("symbol", "print"));
+        assert_eq!(stuff, &tok_val("string", "\"Stuff\""));
+        assert_eq!(plus, &tok_val("symbol", "+"));
+        assert_eq!(n400, &tok_val("int", "400"));
+        assert_eq!(n20, &tok_val("int", "20"));
+        assert_eq!(minus, &tok_val("symbol", "-"));
+        assert_eq!(f70, &tok_val("float", "70.0"));
+        assert_eq!(f1, &tok_val("float", "1.0"));
     }
 }
