@@ -116,14 +116,14 @@ impl NFA {
                         .ranges()
                         .iter()
                         .map(|range| Match {
-                            range: range.start() as u32..range.end() as u32,
+                            range: range.start() as u32..(range.end() as u32 + 1),
                         })
                         .collect(),
                     Class::Bytes(class) => class
                         .ranges()
                         .iter()
                         .map(|range| Match {
-                            range: range.start() as u32..range.end() as u32,
+                            range: range.start() as u32..(range.end() as u32 + 1),
                         })
                         .collect(),
                 };
@@ -527,20 +527,25 @@ impl Match {
     }
 
     fn range_to_string(&self) -> String {
-        let mut ret = String::with_capacity(self.range.len());
-        for char_code in self.range.clone().into_iter() {
+        let mut ret = String::with_capacity(self.range.len().min(256));
+
+        for char_code in self.range.clone().into_iter().take(256) {
             ret.push(char_code as u8 as char);
+        }
+
+        if self.range.len() > 256 {
+            ret += " (rest omitted)"
         }
         ret
     }
 
-    fn char(c: char) -> Self {
+    pub fn char(c: char) -> Self {
         Self {
             range: (c as u32)..(c as u32 + 1),
         }
     }
 
-    fn byte(b: u8) -> Self {
+    pub fn byte(b: u8) -> Self {
         Self {
             range: (b as u32)..(b as u32 + 1),
         }

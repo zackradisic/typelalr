@@ -1,5 +1,5 @@
 use regex_syntax::hir::Hir as RegexHir;
-use std::collections::{btree_map::Entry, BTreeMap};
+use std::collections::BTreeMap;
 
 use crate::{
     dfa::DFA,
@@ -8,19 +8,48 @@ use crate::{
 };
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct TokenDef {
+    name: String,
+    with_val: bool,
+}
+
+impl TokenDef {
+    pub fn to_token(&self) -> Token {
+        Token {
+            name: self.name.clone(),
+            val: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     name: String,
+    val: Option<Box<String>>,
+}
+
+impl Token {
+    pub fn new(name: String) -> Self {
+        Token { name, val: None }
+    }
+
+    pub fn new_with_val<S: Into<String>>(name: String, val: S) -> Self {
+        Token {
+            name,
+            val: Some(Box::new(val.into())),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Lex {
     dfa: DFA,
-    tokens: BTreeMap<StateIdx, Token>,
+    tokens: BTreeMap<StateIdx, TokenDef>,
     accepting_dfa_to_nfa: BTreeMap<StateIdx, Vec<StateIdx>>,
 }
 
 impl Lex {
-    pub fn from_tokens(tokens: Vec<(Token, RegexHir)>) -> Self {
+    pub fn from_tokens(tokens: Vec<(TokenDef, RegexHir)>) -> Self {
         let mut tokens_with_nfa: Vec<_> = tokens
             .into_iter()
             .map(|(tok, regex)| (tok, NFA::from_regex(&regex)))
@@ -66,7 +95,7 @@ impl Lex {
         }
     }
 
-    pub fn new(tokens: Vec<(StateIdx, Token)>, dfa: DFA) -> Self {
+    pub fn new(tokens: Vec<(StateIdx, TokenDef)>, dfa: DFA) -> Self {
         Self {
             accepting_dfa_to_nfa: dfa.accepting_states(),
             dfa,
@@ -93,8 +122,11 @@ impl Lex {
 
         let mut last_accepting_state: Option<(usize, StateIdx)> = None;
 
+        let mut char_vec: Vec<char> = Vec::with_capacity(256);
+
         while forward < chars.len() {
             let c = chars[forward];
+            println!("CHAR {}", c);
 
             let matching_edge = match self.dfa.edge_iter(state_idx) {
                 Some(mut edge_iter) => edge_iter.find(|edge| edge.label.matches(c)),
@@ -104,22 +136,38 @@ impl Lex {
             match matching_edge {
                 Some(edge) => {
                     if let Some(nfa_set) = self.accepting_dfa_to_nfa.get(&edge.to) {
+                        println!("  Accepted");
                         last_accepting_state = Some((forward, *nfa_set.first().unwrap()));
                     }
                     state_idx = edge.to;
                     forward += 1;
+                    char_vec.push(c);
                 }
                 None => {
                     if let Some((last_accepting_idx, last_accepting_state_idx)) =
                         last_accepting_state
                     {
+                        println!("  Pushing tok");
+
+                        println!(
+                            "  Match {}",
+                            input[lexeme_begin..(last_accepting_idx + 1)].to_string()
+                        );
+                        let tok = self.make_tok(
+                            input,
+                            lexeme_begin,
+                            last_accepting_idx,
+                            last_accepting_state_idx,
+                        );
+                        tokens.push(tok);
+
                         lexeme_begin = last_accepting_idx + 1;
                         forward = last_accepting_idx + 1;
-                        // state_idx = last_accepting_state_idx;
                         state_idx = StateIdx(0);
-                        tokens.push(self.tokens.get(&last_accepting_state_idx).unwrap().clone());
+
                         last_accepting_state = None;
                     } else if Self::is_whitespace(c) && forward == lexeme_begin {
+                        println!("  Skip ws");
                         forward += 1;
                         lexeme_begin += 1;
                     } else {
@@ -130,10 +178,45 @@ impl Lex {
         }
 
         if let Some((_last_accepting_idx, last_accepting_state_idx)) = last_accepting_state {
-            tokens.push(self.tokens.get(&last_accepting_state_idx).unwrap().clone());
+            println!(
+                "  Match {}",
+                input[lexeme_begin..(_last_accepting_idx + 1)].to_string()
+            );
+            tokens.push(self.make_tok(
+                input,
+                lexeme_begin,
+                _last_accepting_idx,
+                last_accepting_state_idx,
+            ));
         }
 
         tokens
+    }
+
+    fn make_tok(
+        &self,
+        input: &str,
+        start: usize,
+        end: usize,
+        last_accepting_state_idx: StateIdx,
+    ) -> Token {
+        let ret = match self.tokens.get(&last_accepting_state_idx) {
+            Some(TokenDef {
+                with_val: true,
+                name,
+            }) => {
+                // let val = char_vec.iter().collect::<String>();
+                let val = input[start..(end + 1)].to_string();
+                Token::new_with_val(name.clone(), val)
+            }
+            Some(TokenDef {
+                with_val: false,
+                name,
+            }) => Token::new(name.clone()),
+            None => panic!(),
+        };
+        // char_vec.clear();
+        ret
     }
 
     fn matches(&self, state_idx: StateIdx, c: char) -> Result<OptionUsize, ()> {
@@ -154,18 +237,58 @@ impl Lex {
 
 #[cfg(test)]
 mod test {
-    use super::{Lex, Token};
+    use super::{Lex, Token, TokenDef};
     use regex_syntax::{hir::Hir as RegexHir, Parser};
 
-    fn new_token(name: &str, regex: &str) -> (Token, RegexHir) {
+    fn new_token(name: &str, regex: &str) -> (TokenDef, RegexHir) {
         (
-            Token { name: name.into() },
+            TokenDef {
+                name: name.into(),
+                with_val: false,
+            },
+            Parser::new().parse(regex).unwrap(),
+        )
+    }
+
+    fn new_token_val(name: &str, regex: &str) -> (TokenDef, RegexHir) {
+        (
+            TokenDef {
+                name: name.into(),
+                with_val: true,
+            },
             Parser::new().parse(regex).unwrap(),
         )
     }
 
     fn tok<S: Into<String>>(s: S) -> Token {
-        Token { name: s.into() }
+        Token {
+            name: s.into(),
+            val: None,
+        }
+    }
+
+    fn tok_val<S: Into<String>>(s: S, val: impl Into<String>) -> Token {
+        Token {
+            name: s.into(),
+            val: Some(Box::new(val.into())),
+        }
+    }
+
+    #[test]
+    fn string() {
+        let tokens = vec![new_token_val("string", "\".*\"")];
+
+        let lexer = Lex::from_tokens(tokens.clone());
+        println!("LEX: {:#?}", lexer);
+        let toks = lexer.lex("\"hello\" noob");
+
+        println!("TOKS: {:#?}", toks);
+        // assert!(dfa.test("\"noice\""));
+        // assert!(dfa.test("\"\""));
+
+        // assert!(!dfa.test("dfslkdjf"));
+        // assert!(!dfa.test("\""));
+        // assert!(!dfa.test("\"dslkfjlsdkjf"));
     }
 
     #[test]
@@ -212,5 +335,83 @@ mod test {
         let lexer = Lex::from_tokens(tokens);
         let toks = lexer.lex("abbb");
         assert_eq!(toks[0], tok("abbb"))
+    }
+
+    #[test]
+    fn capture() {
+        let tokens = vec![
+            new_token_val("number", "[0-9]*"),
+            new_token_val("op", "\\+|-"),
+        ];
+
+        let lexer = Lex::from_tokens(tokens.clone());
+        let toks = lexer.lex("420 + 69");
+
+        let [_420, plus, _69]: &[Token; 3] = toks.as_slice().try_into().unwrap();
+
+        assert_eq!(_420, &tok_val("number", "420"));
+        assert_eq!(plus, &tok_val("op", "+"));
+        assert_eq!(_69, &tok_val("number", "69"));
+    }
+
+    #[test]
+    fn capture2() {
+        let tokens = vec![new_token_val("number", "[0-9]*"), new_token("+", "\\+")];
+
+        let lexer = Lex::from_tokens(tokens.clone());
+        let toks = lexer.lex("420 + 69");
+
+        let [_420, plus, _69]: &[Token; 3] = toks.as_slice().try_into().unwrap();
+
+        assert_eq!(_420, &tok_val("number", "420"));
+        assert_eq!(plus, &tok("+"));
+        assert_eq!(_69, &tok_val("number", "69"));
+    }
+
+    #[test]
+    fn simple_lang() {
+        let tokens = vec![
+            new_token("let", "let"),
+            new_token_val("number", "[0-9]*"),
+            new_token("+", "\\+"),
+            new_token_val("identifier", "[A-Za-z_][A-Za-z_0-9]*"),
+            new_token("=", "="),
+            new_token(";", ";"),
+        ];
+
+        let lexer = Lex::from_tokens(tokens.clone());
+        let toks = lexer.lex("let foo = 420;");
+
+        let [_let, foo, eq, _420, semi]: &[Token; 5] = toks.as_slice().try_into().unwrap();
+
+        assert_eq!(_let, &tok("let"));
+        assert_eq!(foo, &tok_val("identifier", "foo"));
+        assert_eq!(eq, &tok("="));
+        assert_eq!(_420, &tok_val("number", "420"));
+        assert_eq!(semi, &tok(";"));
+    }
+
+    #[test]
+    fn lisp() {
+        let tokens = vec![
+            new_token("(", "\\("),
+            new_token(")", "\\)"),
+            new_token_val("symbol", "[\\+\\-\\*A-Za-z_\\.-][A-Za-z_\\.-0-9]*"),
+            new_token_val("string", "\".*\""),
+            new_token_val("int", "[1-9][0-9]*"),
+            new_token_val("float", "[+-]?([0-9]*[.])?[0-9]+"),
+        ];
+
+        let lexer = Lex::from_tokens(tokens.clone());
+        let toks = lexer.lex("(print \"Stuff\" (+ 400 20) (- 70.0 1.0))");
+
+        println!("TOKS: {:#?}", toks);
+        let [_let, foo, eq, _420, semi]: &[Token; 5] = toks.as_slice().try_into().unwrap();
+
+        assert_eq!(_let, &tok("let"));
+        assert_eq!(foo, &tok_val("identifier", "foo"));
+        assert_eq!(eq, &tok("="));
+        assert_eq!(_420, &tok_val("number", "420"));
+        assert_eq!(semi, &tok(";"));
     }
 }

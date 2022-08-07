@@ -14,7 +14,9 @@ use crate::{
 pub struct DFA {
     pub edges: Vec<Edge>,
     pub states: Vec<State>,
+    /// Each DFA state represents a set of states from the NFA it was derived from
     dfa_to_nfa: BTreeMap<StateIdx, BTreeSet<StateIdx>>,
+    /// These are the accepting states from the NFA this DFA was derived from
     accepting_states: BTreeSet<StateIdx>,
 }
 
@@ -76,11 +78,12 @@ impl DFA {
 
     pub fn from_nfa(nfa: NFA) -> Self {
         let alphabet = nfa.labels();
-        let mut set = BTreeSet::new();
+        let mut ranges = BTreeSet::new();
         for label in alphabet {
-            set.insert(label.clone());
+            ranges.insert(label.clone());
         }
-        DFABuilder::new(&nfa).build(&nfa, set.into_iter().collect())
+        let alphabet = remove_overlap(&ranges);
+        DFABuilder::new().build(&nfa, alphabet)
     }
 
     pub fn test(&self, s: &str) -> bool {
@@ -128,7 +131,7 @@ impl DFA {
 }
 
 impl DFABuilder {
-    pub fn new(nfa: &NFA) -> Self {
+    pub fn new() -> Self {
         Self {
             edges: vec![],
             states: vec![],
@@ -358,6 +361,7 @@ impl<'a> Iterator for EdgeIter<'a> {
 
 #[cfg(test)]
 mod test {
+
     use regex_syntax::Parser;
 
     use crate::nfa::NFA;
@@ -420,6 +424,21 @@ mod test {
         let dfa = DFA::from_nfa(nfa);
 
         assert_eq!(dfa.simulate("420"), Some(3));
+    }
+
+    #[test]
+    fn identifier() {
+        let hir = Parser::new().parse("[A-Za-z_][A-Za-z_0-9]*").unwrap();
+        let nfa = NFA::from_regex(&hir);
+        let dfa = DFA::from_nfa(nfa);
+
+        println!("DFA: {:#?}", dfa);
+        assert!(dfa.test("foo"));
+        assert!(dfa.test("_foo"));
+        assert!(dfa.test("foo_123_lsdkfj"));
+
+        assert!(!dfa.test("9foo"));
+        assert!(!dfa.test(""));
     }
 
     #[test]
