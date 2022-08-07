@@ -638,4 +638,18 @@ mod test {
 
         assert!(!nfa.simulate("cbcd"));
     }
+
+    #[test]
+    fn negate() {
+        let hir = Parser::new().parse("[^a]*").unwrap();
+
+        let nfa = NFA::from_regex(&hir);
+
+        assert!(nfa.simulate("bcd"));
+        assert!(nfa.simulate("cbcd"));
+
+        assert!(!nfa.simulate("abcd"));
+        assert!(!nfa.simulate("aaaabcd"));
+        assert!(!nfa.simulate("aaaaaaabcd"));
+    }
 }
