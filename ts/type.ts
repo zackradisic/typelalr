@@ -9,7 +9,7 @@ export type CharRange = {
 
 export type SingleCharRange<T extends keyof CharTable> = {
   from: CharTable[T];
-  to: U.Add<CharTable[T], 1>;
+  to: U.Succ<CharTable[T]>;
 };
 
 export type State = {
@@ -17,6 +17,30 @@ export type State = {
   labels: CharRange[];
   accepting?: boolean;
 };
+
+export type TokenDef = {
+  kind: string;
+  hasValue: boolean;
+};
+
+export type Token = {
+  kind: string;
+  value?: string;
+};
+
+type TokenDefToToken<
+  tokenDefKey extends number,
+  input extends string,
+  lexemeBegin extends number,
+  forward extends number
+> = tokenDefKey extends keyof Tokens
+  ? Tokens[tokenDefKey]["hasValue"] extends true
+    ? {
+        kind: Tokens[tokenDefKey]["kind"];
+        value: U.Substring<input, lexemeBegin, forward>;
+      }
+    : { kind: Tokens[tokenDefKey]["kind"] }
+  : never;
 
 type RangeContains<range extends CharRange, labelIdx extends number> = [
   U.Gte<labelIdx, range["from"]>,
@@ -33,7 +57,7 @@ type NextState<
   ? RangeContains<state["labels"][i], label> extends true
     ? state["to"][i]
     : i extends number
-    ? NextState<label, state, U.Add<i, 1>>
+    ? NextState<label, state, U.Succ<i>>
     : "unreachable: `i` should always be a number"
   : undefined;
 
@@ -53,10 +77,10 @@ type StringToCharList<
   : U.Reverse<ret>;
 
 type LexImpl<
+  inputStr extends string,
   fullInput extends string[],
   stateIdx extends number,
-  // tokens extends Token[],
-  tokens extends string[],
+  tokens extends Token[],
   lexemeBegin extends number,
   forward extends number,
   charBuf extends string[],
@@ -71,11 +95,12 @@ type LexImpl<
       ? maybeNewStateIdx extends number
         ? // We have a matching edge
           LexImpl<
+            inputStr,
             fullInput,
             maybeNewStateIdx,
             tokens,
             lexemeBegin,
-            U.Add<forward, 1>,
+            U.Succ<forward>,
             charBuf,
             StateAccepts<States[maybeNewStateIdx]> extends true
               ? [forward, maybeNewStateIdx]
@@ -88,11 +113,20 @@ type LexImpl<
           ]
         ? lastAcceptingState[1] extends keyof Tokens
           ? LexImpl<
+              inputStr,
               fullInput,
               0,
-              [Tokens[lastAcceptingState[1]], ...tokens],
-              U.Add<lastAcceptingState[0], 1>,
-              U.Add<lastAcceptingState[0], 1>,
+              [
+                TokenDefToToken<
+                  lastAcceptingState[1],
+                  inputStr,
+                  lexemeBegin,
+                  forward
+                >,
+                ...tokens
+              ],
+              U.Succ<lastAcceptingState[0]>,
+              U.Succ<lastAcceptingState[0]>,
               charBuf,
               undefined
             >
@@ -102,11 +136,12 @@ type LexImpl<
             true
           ]
         ? LexImpl<
+            inputStr,
             fullInput,
             stateIdx,
             tokens,
-            U.Add<lexemeBegin, 1>,
-            U.Add<forward, 1>,
+            U.Succ<lexemeBegin>,
+            U.Succ<forward>,
             charBuf,
             lastAcceptingState
           >
@@ -114,13 +149,15 @@ type LexImpl<
           [
             tokens,
             lastAcceptingState,
+            lexemeBegin,
             `invalid symbol: \`${char}\` at index ${forward}`
           ]
-      : "unreachable: inferring `maybeNewStateIdx`"
+      : "unreachable: inferring `maybeNewStateIdx` should always work"
     : `invalid char: ${char}`
-  : [tokens, lastAcceptingState, undefined];
+  : [tokens, lastAcceptingState, lexemeBegin, undefined];
 
 type Lex<fullInput extends string> = LexImpl<
+  fullInput,
   StringToCharList<fullInput, []>,
   0,
   [],
@@ -128,13 +165,30 @@ type Lex<fullInput extends string> = LexImpl<
   0,
   [],
   undefined
-> extends [infer tokens, infer lastAcceptingState, infer error]
+> extends [
+  infer tokens,
+  infer lastAcceptingState,
+  infer lexemeBegin,
+  infer error
+]
   ? error extends string
     ? error
     : lastAcceptingState extends [forward: number, stateIdx: number]
     ? tokens extends any[]
       ? lastAcceptingState[1] extends keyof Tokens
-        ? U.Reverse<[Tokens[lastAcceptingState[1]], ...tokens]>
+        ? lexemeBegin extends number
+          ? U.Reverse<
+              [
+                TokenDefToToken<
+                  lastAcceptingState[1],
+                  fullInput,
+                  lexemeBegin,
+                  lastAcceptingState[0]
+                >,
+                ...tokens
+              ]
+            >
+          : "unreachable: `lexemeBegin` begin should always be a number"
         : lastAcceptingState[1]
       : "unreachable: tokens should be an array"
     : tokens extends any[]
@@ -142,4 +196,7 @@ type Lex<fullInput extends string> = LexImpl<
     : "unreachable: tokens should be an array"
   : "unreachable: inferring `tokens` and `lastAcceptingState` should always work";
 
-type toks = Lex<"let x = 2490283409234;">;
+type toks = Lex<`
+ let foo = 420;
+ let foo = 12381927391827389123;
+`>;
