@@ -1,5 +1,5 @@
 import { Characters, CharTable } from "./chars";
-import { States, Tokens } from "./lex_state.gen";
+import { States, Tokens, DFAtoNFA } from "./lex_state.gen";
 import * as U from "./util";
 
 export type CharRange = {
@@ -28,18 +28,36 @@ export type Token = {
   value?: string;
 };
 
+type GetTokenDef<dfaStateIdx extends number> =
+  dfaStateIdx extends keyof DFAtoNFA
+    ? GetTokenDefImpl<DFAtoNFA[dfaStateIdx]>
+    : `invalid dfa state index: ${dfaStateIdx}`;
+
+type GetTokenDefImpl<nfaStateArr extends number[]> = nfaStateArr extends [
+  infer x,
+  ...infer rest
+]
+  ? x extends keyof Tokens
+    ? Tokens[x]
+    : rest extends number[]
+    ? GetTokenDefImpl<rest>
+    : undefined
+  : undefined;
+
 type TokenDefToToken<
-  tokenDefKey extends number,
+  dfaStateIdx extends number,
   input extends string,
   lexemeBegin extends number,
   forward extends number
-> = tokenDefKey extends keyof Tokens
-  ? Tokens[tokenDefKey]["hasValue"] extends true
-    ? {
-        kind: Tokens[tokenDefKey]["kind"];
-        value: U.Substring<input, lexemeBegin, forward>;
-      }
-    : { kind: Tokens[tokenDefKey]["kind"] }
+> = GetTokenDef<dfaStateIdx> extends infer tokenDef
+  ? tokenDef extends TokenDef
+    ? tokenDef["hasValue"] extends true
+      ? {
+          kind: tokenDef["kind"];
+          value: U.Substring<input, lexemeBegin, forward>;
+        }
+      : { kind: tokenDef["kind"] }
+    : never
   : never;
 
 type RangeContains<range extends CharRange, labelIdx extends number> = [
@@ -111,7 +129,7 @@ type LexImpl<
             lastAcceptingIdx: number,
             lastAcceptingStateIdx: number
           ]
-        ? lastAcceptingState[1] extends keyof Tokens
+        ? lastAcceptingState[1] extends keyof DFAtoNFA
           ? LexImpl<
               inputStr,
               fullInput,
@@ -197,6 +215,6 @@ type Lex<fullInput extends string> = LexImpl<
   : "unreachable: inferring `tokens` and `lastAcceptingState` should always work";
 
 type toks = Lex<`
- let foo = 420;
- let foo = 12381927391827389123;
+  let foo = 420;
+  let x = 9999999;
 `>;

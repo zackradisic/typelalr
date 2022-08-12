@@ -25,7 +25,7 @@ fn nice_case(s: &str) -> String {
 }
 
 mod ts {
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
 
     use crate::lex::{
         dfa::DFA,
@@ -37,6 +37,7 @@ mod ts {
     pub struct Ctx<'a> {
         pub tokens: Tokens<'a>,
         pub states: States,
+        pub dfa_to_nfa: &'a BTreeMap<StateIdx, BTreeSet<StateIdx>>,
         chars: BTreeMap<char, u32>,
     }
 
@@ -57,8 +58,7 @@ mod ts {
                 BTreeMap::from_iter(lex.tokens.iter().flat_map(|(k, v)| {
                     lex.dfa.states.iter().enumerate().filter_map(|(idx, _)| {
                         if lex.accepting_dfa_to_nfa.get(&StateIdx(idx))?.contains(k) {
-                            println!("NAME: {} {}", idx, v.name.as_str());
-                            Some((idx, (v.name.as_str(), v.with_val)))
+                            Some((k.value(), (v.name.as_str(), v.with_val)))
                         } else {
                             None
                         }
@@ -77,6 +77,7 @@ mod ts {
                 tokens,
                 states,
                 chars,
+                dfa_to_nfa: &lex.dfa.dfa_to_nfa,
             }
         }
 
@@ -147,7 +148,30 @@ mod ts {
                 .map(|(i, _)| format!("State{}", i))
                 .collect::<Vec<_>>();
 
-            ret.push_str(&format!("export type States = [{}];", states.join(", ")));
+            ret.push_str(&format!(
+                "export type States = [{}];\n\n",
+                states.join(", ")
+            ));
+
+            fn nfa_set_to_string(set: &BTreeSet<StateIdx>) -> String {
+                format!(
+                    "[ {} ]",
+                    set.iter()
+                        .map(|s| format!("{}", s.value()))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
+            let dfa_to_nfa_str = self
+                .dfa_to_nfa
+                .iter()
+                .map(|(dfa, nfa)| format!("{}: {},\n", dfa.value(), nfa_set_to_string(nfa)))
+                .collect::<String>();
+
+            ret.push_str(&format!(
+                "export type DFAtoNFA = {{\n  {}}}",
+                dfa_to_nfa_str
+            ));
 
             ret
         }

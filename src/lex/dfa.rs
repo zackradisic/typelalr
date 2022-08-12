@@ -14,7 +14,7 @@ pub struct DFA {
     pub edges: Vec<Edge>,
     pub states: Vec<State>,
     /// Each DFA state represents a set of states from the NFA it was derived from
-    dfa_to_nfa: BTreeMap<StateIdx, BTreeSet<StateIdx>>,
+    pub(crate) dfa_to_nfa: BTreeMap<StateIdx, BTreeSet<StateIdx>>,
     /// These are the accepting states from the NFA this DFA was derived from
     pub accepting_states: BTreeSet<StateIdx>,
 }
