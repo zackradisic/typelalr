@@ -1,4 +1,3 @@
-pub mod dfa;
+pub mod codegen;
 pub mod lex;
-pub mod nfa;
 pub mod option_usize;

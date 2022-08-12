@@ -5,10 +5,9 @@ use std::{
 
 use bit_vec::BitVec;
 
-use crate::{
-    nfa::{Match, StateIdx, NFA},
-    option_usize::OptionUsize,
-};
+use crate::option_usize::OptionUsize;
+
+use super::nfa::{Match, StateIdx, NFA};
 
 #[derive(Clone, Debug)]
 pub struct DFA {
@@ -17,7 +16,7 @@ pub struct DFA {
     /// Each DFA state represents a set of states from the NFA it was derived from
     dfa_to_nfa: BTreeMap<StateIdx, BTreeSet<StateIdx>>,
     /// These are the accepting states from the NFA this DFA was derived from
-    accepting_states: BTreeSet<StateIdx>,
+    pub accepting_states: BTreeSet<StateIdx>,
 }
 
 #[derive(Clone, Debug)]
@@ -43,6 +42,20 @@ pub struct State {
 
 impl DFA {
     pub const START_IDX: StateIdx = StateIdx(0);
+
+    pub fn dfa_state_is_accepting(&self, dfa_state_idx: StateIdx) -> bool {
+        match self.dfa_to_nfa.get(&dfa_state_idx) {
+            Some(nfa_states) => {
+                for nfa_state_idx in nfa_states {
+                    if self.accepting_states.contains(nfa_state_idx) {
+                        return true;
+                    }
+                }
+                false
+            }
+            None => false,
+        }
+    }
 
     pub fn accepting_states(&self) -> BTreeMap<StateIdx, Vec<StateIdx>> {
         let mut ret = BTreeMap::<StateIdx, Vec<StateIdx>>::new();
@@ -364,7 +377,7 @@ mod test {
 
     use regex_syntax::Parser;
 
-    use crate::nfa::NFA;
+    use crate::lex::nfa::NFA;
 
     use super::DFA;
 
@@ -374,6 +387,7 @@ mod test {
         let nfa = NFA::from_regex(&hir);
         let dfa = DFA::from_nfa(nfa);
 
+        println!("DFA: {:#?}", dfa);
         assert!(dfa.test("aaaaaab"));
         assert!(dfa.test("ab"));
         assert!(!dfa.test("b"))
