@@ -1,7 +1,7 @@
 use regex_syntax::hir::Hir as RegexHir;
 use std::collections::BTreeMap;
 
-use crate::option_usize::OptionUsize;
+use crate::{option_usize::OptionUsize, parser::{Grammar}};
 
 use super::{dfa::DFA, nfa::{StateIdx, NFA}};
 
@@ -19,6 +19,7 @@ impl TokenDef {
             val: None,
         }
     }
+
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -48,6 +49,24 @@ pub struct Lex {
 }
 
 impl Lex {
+    pub fn from_grammar<'ast>(grammar: &Grammar<'ast>) -> Self {
+        let mut tokens = Vec::new();
+
+        let input_tokens = grammar.iter_productions().map(|prod| prod.input_tokens.iter()).flatten();
+        
+
+        for tok in input_tokens {
+            let token_def_with_regex = match tok.to_token_def_with_regex() {
+                Some(t) => t,
+                None => continue,
+            };
+
+            tokens.push(token_def_with_regex);
+        }
+
+        Self::from_tokens(tokens)
+    }
+    
     pub fn from_tokens(tokens: Vec<(TokenDef, RegexHir)>) -> Self {
         let mut tokens_with_nfa: Vec<_> = tokens
             .into_iter()
@@ -279,7 +298,7 @@ mod test {
         let tokens = vec![new_token("number", "[0-9]+"), new_token("+", "\\+")];
         let lexer = Lex::from_tokens(tokens);
 
-        let toks = lexer.lex("zzz");
+        let toks = lexer.lex("420 + 69");
         let [num1, plus, num2]: &[Token; 3] = toks.as_slice().try_into().unwrap();
 
         assert_eq!(num1, &tok("number"));

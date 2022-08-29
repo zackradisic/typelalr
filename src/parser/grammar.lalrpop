@@ -1,0 +1,56 @@
+use crate::parser::ast::*;
+use crate::parser::ParserSupport;
+
+grammar<'ast>(support: &mut ParserSupport<'ast>);
+
+pub Program: Vec<Production<'ast>> = {
+    <v:(<Production>)+> => v
+}
+
+pub Production: Production<'ast> = {
+    "export"? <ident: Ident> "=" "[" <bodies: Comma<ProductionBody>> "]" => Production {
+        name: ident,
+        bodies,
+        is_start: false,
+    },
+    "export" "start" <ident: Ident> "=" "[" <bodies: Comma<ProductionBody>> "]" => Production {
+        name: ident,
+        bodies,
+        is_start: true,
+    }
+}
+
+pub ProductionBody: ProductionBody<'ast> = {
+    <input_tokens: InputToken+> "=>" <ts_code: TsCode> => ProductionBody {
+        input_tokens,
+        mapping_fn: ts_code,
+    }
+}
+
+pub InputToken: InputToken<'ast> = {
+    r#""[^"]*""# => InputToken::StrLit(support.alloc_quoted_str(<>)),
+    "<" <name: Ident> ":" <ty: Ident> ">" => InputToken::Named(support.alloc(NamedInputToken {
+        name: Some(name),
+        ty
+    })),
+   "r" <regex: r#""[^"]*""#>  => InputToken::Regex(support.alloc_regex(regex))
+}
+
+pub Ident: Ident<'ast> = {
+    r"[_A-Za-z][_A-Za-z0-9]*" => Ident(support.alloc_str(<>))
+}
+
+pub TsCode: &'ast str  = {
+    <code: r"\(.*\)"> => support.alloc_ts_code(code)
+}
+
+// Utils
+Comma<T>: Vec<T> = {
+    <mut v:(<T> ",")*> <e:T?> => match e {
+        None => v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};

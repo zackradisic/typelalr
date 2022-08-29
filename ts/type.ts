@@ -215,6 +215,5 @@ type Lex<fullInput extends string> = LexImpl<
   : "unreachable: inferring `tokens` and `lastAcceptingState` should always work";
 
 type toks = Lex<`
-  let foo = 420;
-  let x = 9999999;
+    let foo = 420; 
 `>;
