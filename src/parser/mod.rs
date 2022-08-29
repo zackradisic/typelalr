@@ -3,25 +3,30 @@ pub mod grammar;
 
 mod support;
 
+use regex_syntax::hir::Hir as RegexHir;
+use regex_syntax::Parser as RegexParser;
 use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 
 use bumpalo::Bump;
 pub use support::*;
 
-use crate::lalr::item::{ProductionIdx, TokenIdx};
+use crate::{
+    lalr::item::{ProductionIdx, TokenIdx},
+    lex::lex::TokenDef,
+};
 
-use self::ast::{Ident, InputSymbol, NamedSymbol};
+use self::ast::Ident;
 
 /// Augmented grammar
 #[derive(Debug)]
 pub struct Grammar<'ast> {
     production_name_map: BTreeMap<Ident<'ast>, Vec<ProductionIdx>>,
     productions: Vec<Production<'ast>>,
-    tokens: Vec<InputSymbol<'ast>>,
+    tokens: Vec<Symbol<'ast>>,
     augmented_start_name: Ident<'ast>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, PartialOrd, Eq, Ord, Clone, Copy)]
 pub enum Symbol<'ast> {
     StrLit(&'ast str),
     NonTerminal(Ident<'ast>),
@@ -33,7 +38,7 @@ pub enum Symbol<'ast> {
 #[derive(Debug)]
 pub struct Production<'ast> {
     pub name: Ident<'ast>,
-    pub input_tokens: &'ast [InputSymbol<'ast>],
+    pub input_tokens: Vec<Symbol<'ast>>,
     pub mapping_fn: Option<&'ast str>,
 }
 
@@ -64,12 +69,7 @@ impl<'ast> Grammar<'ast> {
         );
         productions.push(Production {
             name: augmented_start_name,
-            input_tokens: bump
-                .alloc(vec![InputSymbol::Named(bump.alloc(NamedSymbol {
-                    name: Some(augmented_start_name),
-                    ty: bump.alloc(InputSymbol::NonTerminal(start_symbol.name)),
-                }))])
-                .as_slice(),
+            input_tokens: vec![Symbol::NonTerminal(start_symbol.name)],
             mapping_fn: None,
         });
 
@@ -89,14 +89,14 @@ impl<'ast> Grammar<'ast> {
             }
         }
 
-        let mut token_set: BTreeSet<InputSymbol> = BTreeSet::from_iter([InputSymbol::Eof]);
+        let mut token_set: BTreeSet<Symbol> = BTreeSet::from_iter([Symbol::Eof]);
         for prod in productions.iter() {
             for input_token in prod.input_tokens.iter() {
                 token_set.insert(input_token.clone());
             }
         }
         let mut tokens = Vec::with_capacity(1 + token_set.len());
-        tokens.push(InputSymbol::Eof);
+        tokens.push(Symbol::Eof);
         tokens.extend(token_set);
 
         Self {
@@ -119,7 +119,7 @@ impl<'ast> Grammar<'ast> {
         }
     }
 
-    pub fn tokens(&self) -> std::slice::Iter<InputSymbol<'ast>> {
+    pub fn tokens(&self) -> std::slice::Iter<Symbol<'ast>> {
         self.tokens.iter()
     }
 
@@ -138,8 +138,8 @@ impl<'ast> Grammar<'ast> {
     pub fn non_terminals(
         &self,
     ) -> std::iter::FilterMap<
-        std::iter::Enumerate<std::slice::Iter<InputSymbol<'ast>>>,
-        for<'a> fn((usize, &'a InputSymbol<'ast>)) -> Option<(TokenIdx, &'a InputSymbol<'ast>)>,
+        std::iter::Enumerate<std::slice::Iter<Symbol<'ast>>>,
+        for<'a> fn((usize, &'a Symbol<'ast>)) -> Option<(TokenIdx, &'a Symbol<'ast>)>,
     > {
         self.tokens.iter().enumerate().filter_map(|(i, tok)| {
             if !tok.is_terminal() {
@@ -158,11 +158,11 @@ impl<'ast> Grammar<'ast> {
         self.productions.get(idx.0 as usize)
     }
 
-    pub fn get_token(&self, idx: TokenIdx) -> Option<&InputSymbol> {
+    pub fn get_token(&self, idx: TokenIdx) -> Option<&Symbol> {
         self.tokens.get(idx.0 as usize)
     }
 
-    pub fn get_token_idx(&self, input_token: &InputSymbol) -> Option<TokenIdx> {
+    pub fn get_token_idx(&self, input_token: &Symbol) -> Option<TokenIdx> {
         self.tokens.iter().enumerate().find_map(|(idx, tok)| {
             if tok.eq(input_token) {
                 Some(TokenIdx(idx as u32))
@@ -173,6 +173,81 @@ impl<'ast> Grammar<'ast> {
     }
 }
 
+impl<'ast> Symbol<'ast> {
+    pub fn to_token_def_with_regex(&self, token_idx: TokenIdx) -> Option<(TokenDef, RegexHir)> {
+        let token_idx = token_idx.0;
+        match self {
+            Symbol::StrLit(str_lit) => Some((
+                TokenDef {
+                    name: str_lit.to_string(),
+                    with_val: false,
+                    token_idx: Some(token_idx),
+                },
+                RegexParser::new().parse(str_lit).unwrap(),
+            )),
+            Symbol::Regex(regex) => Some((
+                TokenDef {
+                    name: regex.to_string(),
+                    with_val: true,
+                    token_idx: Some(token_idx),
+                },
+                RegexParser::new().parse(regex).unwrap(),
+            )),
+            Symbol::Epsilon => None,
+            Symbol::Eof => None,
+            Symbol::NonTerminal(_) => None,
+        }
+    }
+
+    pub fn as_non_terminal(&self) -> Option<&Ident<'ast>> {
+        match self {
+            Symbol::NonTerminal(ident) => Some(ident),
+            _ => None,
+        }
+    }
+
+    pub fn is_terminal(&self) -> bool {
+        match self {
+            Symbol::Eof | Symbol::Epsilon | Symbol::Regex(_) | Symbol::StrLit(_) => true,
+            Symbol::NonTerminal(_) => false,
+        }
+    }
+
+    fn precedence(&self) -> u8 {
+        match self {
+            Symbol::Epsilon => 0,
+            Symbol::StrLit(_) => 1,
+            Symbol::NonTerminal(_) => 2,
+            Symbol::Regex(_) => 3,
+            Symbol::Eof => 4,
+        }
+    }
+
+    fn compare(&self, other: &Self) -> std::cmp::Ordering {
+        use std::cmp::Ordering::*;
+
+        match (self, other) {
+            (Self::Epsilon, _) => Less,
+            (Self::StrLit(a), Self::StrLit(b)) => a.cmp(b),
+            (Self::Regex(a), Self::Regex(b)) => a.cmp(b),
+            (Self::NonTerminal(a), Self::NonTerminal(b)) => a.cmp(b),
+            _ => self.precedence().cmp(&other.precedence()),
+        }
+    }
+}
+
+impl<'ast> std::fmt::Display for Symbol<'ast> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Symbol::StrLit(str_lit) => f.write_str(str_lit),
+            Symbol::NonTerminal(non_terminal) => f.write_str(non_terminal.as_ref()),
+            Symbol::Regex(regex) => f.write_str(regex),
+            Symbol::Epsilon => f.write_str("ε"),
+            Symbol::Eof => f.write_str("﹩"),
+        }
+    }
+}
+
 impl<'ast> Production<'ast> {
     pub fn from_ast(
         prod: &'ast ast::Production<'ast>,
@@ -180,7 +255,11 @@ impl<'ast> Production<'ast> {
     ) -> Self {
         Self {
             name: prod.name,
-            input_tokens: &prod_body.input_tokens,
+            input_tokens: prod_body
+                .input_tokens
+                .iter()
+                .map(|sym| sym.lower())
+                .collect(),
             mapping_fn: Some(prod_body.mapping_fn),
         }
     }

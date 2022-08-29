@@ -9,7 +9,7 @@ use indexmap::{IndexMap, IndexSet};
 
 use crate::parser::{
     ast::{Ident, InputSymbol},
-    Grammar,
+    Grammar, Symbol,
 };
 
 use super::item::{ItemSet, ProductionIdx, TokenIdx};
@@ -36,6 +36,10 @@ impl<K: Ord, V> Table<K, V> {
             Some(inner) => inner.get(&inner_idx),
             None => None,
         }
+    }
+
+    pub fn valid(&self, outer_idx: u32) -> Option<std::collections::btree_map::Keys<K, V>> {
+        self.0.get(&(outer_idx as usize)).map(BTreeMap::keys)
     }
 }
 
@@ -71,7 +75,7 @@ pub fn make_lalr_tables<'ast>(
     #[inline]
     fn compute_goto<'ast>(
         item_set: &ItemSet,
-        a: &InputSymbol<'ast>,
+        a: &Symbol<'ast>,
         grammar: &Grammar<'ast>,
         lr_sets: &IndexSet<ItemSet>,
         lr_to_lalr: &BTreeMap<usize, usize>,

@@ -1,6 +1,7 @@
 use indexmap::IndexSet;
 
 use crate::{
+    lalr::item::TokenDebug,
     lex::lex::{Lex, Token},
     parser::Grammar,
 };
@@ -68,11 +69,12 @@ impl<'ast> Lalr<'ast> {
         }
 
         // println!("ACTION: {:#?}", self.action);
-        println!("GOTO: {:#?}", self.goto);
+        // println!("GOTO: {:#?}", self.goto);
 
         loop {
-            let s = stack.last().unwrap().clone();
-            println!("S {:?} TOKEN {:?}: {:?}", s, a_idx, a);
+            let s = stack.last().expect("Stack is empty").clone();
+            println!("STACK: {:?}", stack);
+            println!("S={:?} TOKEN {:?}: {:?}", s, a_idx, a);
 
             match self.action.try_index((s, a_idx)) {
                 Some(Action::Shift(new_state_idx)) => {
@@ -80,18 +82,21 @@ impl<'ast> Lalr<'ast> {
                     next_token(&mut a, &mut a_idx, &mut i, tokens);
                 }
                 Some(Action::Reduce(prod_idx)) => {
-                    let production = self.grammar.get_production(*prod_idx).unwrap();
+                    let production = self
+                        .grammar
+                        .get_production(*prod_idx)
+                        .expect("Production is undefined");
                     let new_len = stack.len() - production.input_tokens.len();
-                    println!("STACK: {:?}", stack);
                     stack.truncate(new_len);
-                    println!("STACK: {:?}", stack);
+                    println!("  truncated STACK: {:?}", stack);
 
                     let goto_ta = *self
                         .goto
-                        .try_index((*stack.last().expect("TOP OF STACK"), production.name))
-                        .expect("GOTO");
+                        .try_index((*stack.last().expect("Stack is empty"), production.name))
+                        .expect("Goto is empty");
 
                     stack.push(goto_ta as u32);
+                    println!("  pushing ({}) => STACK: {:?}", goto_ta, stack);
 
                     println!(
                         "Outputting production: {} {:?}",
@@ -100,7 +105,13 @@ impl<'ast> Lalr<'ast> {
                     );
                 }
                 Some(Action::Accept) => break,
-                None => todo!(),
+                None => panic!(
+                    "Invalid token: {:?}\nValid: {:?}",
+                    a,
+                    self.action.valid(s).map(|valid_keys| valid_keys
+                        .map(|token_idx| TokenDebug(*token_idx, &self.grammar))
+                        .collect::<Vec<_>>())
+                ),
             }
         }
 
@@ -131,12 +142,49 @@ mod test {
         let bump = Bump::new();
         let ast = parse_grammar(&bump, grammar_str);
         let grammar = Grammar::grammar_from_ast_productions(&bump, &ast);
-        println!(
-            "TOKENS: {:#?}",
-            grammar.tokens().enumerate().collect::<Vec<_>>()
-        );
+
+        // println!(
+        //     "TOKENS: {:#?}",
+        //     grammar.tokens().enumerate().collect::<Vec<_>>()
+        // );
+
         let lalr = Lalr::new(grammar);
 
-        let noob = lalr.parse("cccccd");
+        let noob = lalr.parse("ccdd");
+    }
+
+    #[test]
+    fn lisp() {
+        let grammar_str = r#"
+            export start Exprs = [
+                <e1: Expr> "plus" <e2: Expr> => ("nice"),
+                Expr => ("also nice")
+            ]
+
+            export Expr = [ 
+                <int: Int> => ({ kind: "int", int }),
+                <str: String> => ({ kind: "str", str }),
+            ]
+
+            export Int = [
+                r"[1-9][0-9]*" => ("lol")
+            ]
+
+            export String = [
+                r"'[^']*'" => ("lol")
+            ]
+        "#;
+        let bump = Bump::new();
+        let ast = parse_grammar(&bump, grammar_str);
+        let grammar = Grammar::grammar_from_ast_productions(&bump, &ast);
+
+        // println!(
+        //     "TOKENS: {:#?}",
+        //     grammar.tokens().enumerate().collect::<Vec<_>>()
+        // );
+
+        let lalr = Lalr::new(grammar);
+
+        let noob = lalr.parse("42 plus 420");
     }
 }

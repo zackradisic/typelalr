@@ -43,6 +43,19 @@ impl<'ast> Production<'ast> {
 }
 
 impl<'ast> InputSymbol<'ast> {
+    pub fn lower(&self) -> crate::parser::Symbol<'ast> {
+        use crate::parser::Symbol::*;
+
+        match self {
+            InputSymbol::StrLit(a) => StrLit(a),
+            InputSymbol::Named(NamedSymbol { ty, .. }) => ty.lower(),
+            InputSymbol::NonTerminal(name) => NonTerminal(*name),
+            InputSymbol::Regex(regex) => Regex(regex),
+            InputSymbol::Epsilon => Epsilon,
+            InputSymbol::Eof => Eof,
+        }
+    }
+
     pub fn to_token_def_with_regex(&self, token_idx: TokenIdx) -> Option<(TokenDef, RegexHir)> {
         let token_idx = token_idx.0;
         match self {

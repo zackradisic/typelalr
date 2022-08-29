@@ -8,7 +8,7 @@ use indexmap::IndexSet;
 
 use crate::parser::{
     ast::{Ident, InputSymbol, NamedSymbol},
-    Grammar, Production,
+    Grammar, Production, Symbol,
 };
 
 use super::first::first;
@@ -71,12 +71,12 @@ impl Item {
         grammar.get_production(self.production_idx()).unwrap()
     }
 
-    pub fn dot_token<'ast>(self, grammar: &'ast Grammar<'ast>) -> Option<&'ast InputSymbol<'ast>> {
+    pub fn dot_token<'ast>(self, grammar: &'ast Grammar<'ast>) -> Option<&'ast Symbol<'ast>> {
         let production = grammar.get_production(self.production_idx()).unwrap();
         production.input_tokens.get(self.dot() as usize)
     }
 
-    pub fn last_token<'ast>(self, grammar: &'ast Grammar<'ast>) -> &'ast InputSymbol<'ast> {
+    pub fn last_token<'ast>(self, grammar: &'ast Grammar<'ast>) -> &'ast Symbol<'ast> {
         let production = grammar.get_production(self.production_idx()).unwrap();
         production.input_tokens.last().unwrap()
     }
@@ -263,7 +263,7 @@ impl ItemSet {
         }
     }
 
-    pub fn goto<'ast>(&self, x: &InputSymbol, grammar: &'ast Grammar<'ast>) -> Self {
+    pub fn goto<'ast>(&self, x: &Symbol, grammar: &'ast Grammar<'ast>) -> Self {
         let mut j = BTreeMap::<Item, BTreeSet<TokenIdx>>::default();
 
         for (item, lookahead_set) in self.0.iter() {
@@ -333,7 +333,7 @@ impl std::hash::Hash for ItemSet {
 }
 
 impl<'ast> Iterator for ItemIter<'ast> {
-    type Item = &'ast InputSymbol<'ast>;
+    type Item = &'ast Symbol<'ast>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let cur_idx = self.item.dot();

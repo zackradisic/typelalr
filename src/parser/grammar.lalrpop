@@ -28,12 +28,13 @@ pub ProductionBody: ProductionBody<'ast> = {
 }
 
 pub Symbol: InputSymbol<'ast> = {
-    r#""[^"]*""# => InputSymbol::StrLit(support.alloc_quoted_str(<>)),
+    r#""(\\\\|\\"|[^"\\])*""# => InputSymbol::StrLit(support.alloc_quoted_str(<>)),
+    <name: Ident> => InputSymbol::NonTerminal(name),
     "<" <name: Ident> ":" <ty: Ident> ">" => InputSymbol::Named(support.alloc(NamedSymbol {
         name: Some(name),
         ty: support.alloc(InputSymbol::NonTerminal(ty)),
     })),
-   "r" <regex: r#""[^"]*""#>  => InputSymbol::Regex(support.alloc_regex(regex))
+   "r" <regex: r#""(\\\\|\\"|[^"\\])*""#>  => InputSymbol::Regex(support.alloc_regex(regex))
 }
 
 pub Ident: Ident<'ast> = {
