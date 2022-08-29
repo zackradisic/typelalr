@@ -7,7 +7,10 @@ use std::{
 use bit_vec::BitVec;
 use indexmap::{IndexMap, IndexSet};
 
-use crate::parser::{ast::InputToken, Grammar};
+use crate::parser::{
+    ast::{Ident, InputSymbol},
+    Grammar,
+};
 
 use super::item::{ItemSet, ProductionIdx, TokenIdx};
 
@@ -19,14 +22,16 @@ pub enum Action {
     Accept,
 }
 
-type TableInner<T> = BTreeMap<usize, BTreeMap<TokenIdx, T>>;
+type TableInner<K, V> = BTreeMap<usize, BTreeMap<K, V>>;
 
-pub struct Table<T>(TableInner<T>);
-pub type ActionTable = Table<Action>;
-pub type GotoTable = Table<usize>;
+#[derive(Debug)]
+pub struct Table<K, V>(TableInner<K, V>);
 
-impl<T> Table<T> {
-    pub fn try_index(&self, (outer_idx, inner_idx): (u32, TokenIdx)) -> Option<&T> {
+pub type ActionTable = Table<TokenIdx, Action>;
+pub type GotoTable<'ast> = Table<Ident<'ast>, usize>;
+
+impl<K: Ord, V> Table<K, V> {
+    pub fn try_index(&self, (outer_idx, inner_idx): (u32, K)) -> Option<&V> {
         match self.0.get(&(outer_idx as usize)) {
             Some(inner) => inner.get(&inner_idx),
             None => None,
@@ -34,20 +39,22 @@ impl<T> Table<T> {
     }
 }
 
-impl<T> Deref for Table<T> {
-    type Target = TableInner<T>;
+impl<K, V> Deref for Table<K, V> {
+    type Target = TableInner<K, V>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-pub fn make_tables<'ast>(grammar: &Grammar<'ast>) -> (ActionTable, GotoTable, IndexSet<ItemSet>) {
-    let lr_items = ItemSet::items(&grammar);
+pub fn make_tables<'ast>(
+    grammar: &Grammar<'ast>,
+) -> (ActionTable, GotoTable<'ast>, IndexSet<ItemSet>) {
+    let lr_items = ItemSet::items(grammar);
 
     let (lalr_set, lr_to_lalr) = merge_cores(&lr_items);
 
-    let (action, goto) = make_lalr_tables(&grammar, &lalr_set, &lr_items, &lr_to_lalr);
+    let (action, goto) = make_lalr_tables(grammar, &lalr_set, &lr_items, &lr_to_lalr);
 
     (action, goto, lalr_set)
 }
@@ -57,14 +64,14 @@ pub fn make_lalr_tables<'ast>(
     lalr_sets: &IndexSet<ItemSet>,
     lr_sets: &IndexSet<ItemSet>,
     lr_to_lalr: &BTreeMap<usize, usize>,
-) -> (ActionTable, GotoTable) {
-    let mut action: TableInner<Action> = Default::default();
-    let mut goto: TableInner<usize> = Default::default();
+) -> (ActionTable, GotoTable<'ast>) {
+    let mut action: TableInner<TokenIdx, Action> = Default::default();
+    let mut goto: TableInner<Ident<'ast>, usize> = Default::default();
 
     #[inline]
     fn compute_goto<'ast>(
         item_set: &ItemSet,
-        a: &InputToken<'ast>,
+        a: &InputSymbol<'ast>,
         grammar: &Grammar<'ast>,
         lr_sets: &IndexSet<ItemSet>,
         lr_to_lalr: &BTreeMap<usize, usize>,
@@ -131,14 +138,29 @@ pub fn make_lalr_tables<'ast>(
         }
     }
 
+    let token_idx_to_production_name = grammar
+        .tokens()
+        .enumerate()
+        .filter_map(|(token_idx, symbol)| {
+            symbol
+                .as_non_terminal()
+                .map(|t| (TokenIdx(token_idx as u32), *t))
+        })
+        .fold(BTreeMap::new(), |mut map, (token_idx, prod_name)| {
+            map.insert(token_idx, prod_name);
+            map
+        });
+
     for (i, state) in lalr_sets.iter().enumerate() {
-        for (token_idx, a) in grammar.non_terminals() {
-            let goto_ia = state.goto(a, grammar);
+        for (token_idx, non_terminal_name) in grammar.non_terminals() {
+            let production_name = token_idx_to_production_name.get(&token_idx).unwrap();
+            // let goto_ia = state.goto(&Symbol::NonTerminal(*non_terminal_name), grammar);
+            let goto_ia = state.goto(non_terminal_name, grammar);
             match lalr_sets.get_index_of(&goto_ia) {
                 Some(j) => {
                     goto.entry(i)
                         .or_insert_with(BTreeMap::new)
-                        .insert(token_idx, j);
+                        .insert(*production_name, j);
                 }
                 None => (),
             }
@@ -303,12 +325,12 @@ mod test {
 
         println!("\n--------\n");
 
-        for (i, item_set) in goto.iter() {
-            let item_set = item_set.iter().fold(BTreeMap::new(), |mut acc, (k, v)| {
-                acc.insert(TokenDebug(*k, &grammar), *v);
-                acc
-            });
-            println!("{}: {:#?}", i, item_set)
-        }
+        // for (i, item_set) in goto.iter() {
+        //     let item_set = item_set.iter().fold(BTreeMap::new(), |mut acc, (k, v)| {
+        //         acc.insert(TokenDebug(*k, &grammar), *v);
+        //         acc
+        //     });
+        //     println!("{}: {:#?}", i, item_set)
+        // }
     }
 }

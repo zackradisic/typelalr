@@ -371,6 +371,7 @@ mod test {
             TokenDef {
                 name: name.into(),
                 with_val: false,
+                token_idx: None,
             },
             Parser::new().parse(regex).unwrap(),
         )
@@ -381,6 +382,7 @@ mod test {
             TokenDef {
                 name: name.into(),
                 with_val: true,
+                token_idx: None,
             },
             Parser::new().parse(regex).unwrap(),
         )

@@ -10,22 +10,30 @@ pub use support::*;
 
 use crate::lalr::item::{ProductionIdx, TokenIdx};
 
-use self::ast::{Ident, InputToken, NamedInputToken};
+use self::ast::{Ident, InputSymbol, NamedSymbol};
 
 /// Augmented grammar
 #[derive(Debug)]
 pub struct Grammar<'ast> {
     production_name_map: BTreeMap<Ident<'ast>, Vec<ProductionIdx>>,
     productions: Vec<Production<'ast>>,
-    /// TODO: Rename this to grammar symbols
-    tokens: Vec<InputToken<'ast>>,
+    tokens: Vec<InputSymbol<'ast>>,
     augmented_start_name: Ident<'ast>,
+}
+
+#[derive(Debug)]
+pub enum Symbol<'ast> {
+    StrLit(&'ast str),
+    NonTerminal(Ident<'ast>),
+    Regex(&'ast str),
+    Epsilon,
+    Eof,
 }
 
 #[derive(Debug)]
 pub struct Production<'ast> {
     pub name: Ident<'ast>,
-    pub input_tokens: &'ast [InputToken<'ast>],
+    pub input_tokens: &'ast [InputSymbol<'ast>],
     pub mapping_fn: Option<&'ast str>,
 }
 
@@ -57,9 +65,9 @@ impl<'ast> Grammar<'ast> {
         productions.push(Production {
             name: augmented_start_name,
             input_tokens: bump
-                .alloc(vec![InputToken::Named(bump.alloc(NamedInputToken {
+                .alloc(vec![InputSymbol::Named(bump.alloc(NamedSymbol {
                     name: Some(augmented_start_name),
-                    ty: start_symbol.name,
+                    ty: bump.alloc(InputSymbol::NonTerminal(start_symbol.name)),
                 }))])
                 .as_slice(),
             mapping_fn: None,
@@ -81,14 +89,14 @@ impl<'ast> Grammar<'ast> {
             }
         }
 
-        let mut token_set: BTreeSet<InputToken> = BTreeSet::from_iter([InputToken::Eof]);
+        let mut token_set: BTreeSet<InputSymbol> = BTreeSet::from_iter([InputSymbol::Eof]);
         for prod in productions.iter() {
             for input_token in prod.input_tokens.iter() {
                 token_set.insert(input_token.clone());
             }
         }
         let mut tokens = Vec::with_capacity(1 + token_set.len());
-        tokens.push(InputToken::Eof);
+        tokens.push(InputSymbol::Eof);
         tokens.extend(token_set);
 
         Self {
@@ -111,15 +119,27 @@ impl<'ast> Grammar<'ast> {
         }
     }
 
-    pub fn tokens(&self) -> std::slice::Iter<InputToken<'ast>> {
+    pub fn tokens(&self) -> std::slice::Iter<InputSymbol<'ast>> {
         self.tokens.iter()
     }
+
+    // pub fn non_terminals(
+    //     &self,
+    // ) -> std::iter::FilterMap<
+    //     std::iter::Enumerate<std::slice::Iter<Symbol<'ast>>>,
+    //     for<'a> fn((usize, &'a Symbol<'ast>)) -> Option<(TokenIdx, &'a Ident<'ast>)>,
+    // > {
+    //     self.tokens.iter().enumerate().filter_map(|(i, tok)| {
+    //         tok.as_non_terminal()
+    //             .map(|non_terminal_name| (TokenIdx(i as u32), non_terminal_name))
+    //     })
+    // }
 
     pub fn non_terminals(
         &self,
     ) -> std::iter::FilterMap<
-        std::iter::Enumerate<std::slice::Iter<InputToken<'ast>>>,
-        for<'a> fn((usize, &'a InputToken<'ast>)) -> Option<(TokenIdx, &'a InputToken<'ast>)>,
+        std::iter::Enumerate<std::slice::Iter<InputSymbol<'ast>>>,
+        for<'a> fn((usize, &'a InputSymbol<'ast>)) -> Option<(TokenIdx, &'a InputSymbol<'ast>)>,
     > {
         self.tokens.iter().enumerate().filter_map(|(i, tok)| {
             if !tok.is_terminal() {
@@ -138,11 +158,11 @@ impl<'ast> Grammar<'ast> {
         self.productions.get(idx.0 as usize)
     }
 
-    pub fn get_token(&self, idx: TokenIdx) -> Option<&InputToken> {
+    pub fn get_token(&self, idx: TokenIdx) -> Option<&InputSymbol> {
         self.tokens.get(idx.0 as usize)
     }
 
-    pub fn get_token_idx(&self, input_token: &InputToken) -> Option<TokenIdx> {
+    pub fn get_token_idx(&self, input_token: &InputSymbol) -> Option<TokenIdx> {
         self.tokens.iter().enumerate().find_map(|(idx, tok)| {
             if tok.eq(input_token) {
                 Some(TokenIdx(idx as u32))

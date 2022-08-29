@@ -1,3 +1,4 @@
+use crate::lalr::item::TokenIdx;
 use crate::lex::lex::TokenDef;
 use regex_syntax::hir::Hir as RegexHir;
 use regex_syntax::Parser as RegexParser;
@@ -13,23 +14,24 @@ pub struct Production<'ast> {
 
 #[derive(Debug, PartialEq)]
 pub struct ProductionBody<'ast> {
-    pub input_tokens: Vec<InputToken<'ast>>,
+    pub input_tokens: Vec<InputSymbol<'ast>>,
     pub mapping_fn: &'ast str,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum InputToken<'ast> {
+pub enum InputSymbol<'ast> {
     StrLit(&'ast str),
-    Named(&'ast NamedInputToken<'ast>),
+    Named(&'ast NamedSymbol<'ast>),
+    NonTerminal(Ident<'ast>),
     Regex(&'ast str),
     Epsilon,
     Eof,
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct NamedInputToken<'input> {
-    pub name: Option<Ident<'input>>,
-    pub ty: Ident<'input>,
+pub struct NamedSymbol<'ast> {
+    pub name: Option<Ident<'ast>>,
+    pub ty: &'ast InputSymbol<'ast>,
 }
 
 #[repr(transparent)]
@@ -40,46 +42,62 @@ impl<'ast> Production<'ast> {
     // pub fn get_input_token(&self, token_idx: u32) ->
 }
 
-impl<'ast> InputToken<'ast> {
-    pub fn to_token_def_with_regex(&self) -> Option<(TokenDef, RegexHir)> {
+impl<'ast> InputSymbol<'ast> {
+    pub fn to_token_def_with_regex(&self, token_idx: TokenIdx) -> Option<(TokenDef, RegexHir)> {
+        let token_idx = token_idx.0;
         match self {
-            InputToken::StrLit(str_lit) => Some((
+            InputSymbol::StrLit(str_lit) => Some((
                 TokenDef {
                     name: str_lit.to_string(),
                     with_val: false,
+                    token_idx: Some(token_idx),
                 },
                 RegexParser::new().parse(str_lit).unwrap(),
             )),
-            InputToken::Regex(regex) => Some((
+            InputSymbol::Regex(regex) => Some((
                 TokenDef {
                     name: regex.to_string(),
                     with_val: true,
+                    token_idx: Some(token_idx),
                 },
                 RegexParser::new().parse(regex).unwrap(),
             )),
-            InputToken::Named(NamedInputToken { name, ty }) => None,
-            InputToken::Epsilon => None,
-            InputToken::Eof => None,
+            InputSymbol::Named(NamedSymbol { name, ty }) => {
+                ty.to_token_def_with_regex(TokenIdx(token_idx))
+            }
+            InputSymbol::Epsilon => None,
+            InputSymbol::Eof => None,
+            InputSymbol::NonTerminal(_) => None,
+        }
+    }
+
+    pub fn as_non_terminal(&self) -> Option<&Ident<'ast>> {
+        match self {
+            InputSymbol::Named(named) => named.ty.as_non_terminal(),
+            InputSymbol::NonTerminal(ident) => Some(ident),
+            _ => None,
         }
     }
 
     pub fn is_terminal(&self) -> bool {
         match self {
-            InputToken::Eof
-            | InputToken::Epsilon
-            | InputToken::Regex(_)
-            | InputToken::StrLit(_) => true,
-            InputToken::Named(_) => false,
+            InputSymbol::Eof
+            | InputSymbol::Epsilon
+            | InputSymbol::Regex(_)
+            | InputSymbol::StrLit(_) => true,
+            InputSymbol::Named(named) => named.ty.is_terminal(),
+            InputSymbol::NonTerminal(_) => false,
         }
     }
 
     fn precedence(&self) -> u8 {
         match self {
-            InputToken::Epsilon => 0,
-            InputToken::StrLit(_) => 1,
-            InputToken::Named(_) => 2,
-            InputToken::Regex(_) => 3,
-            InputToken::Eof => 4,
+            InputSymbol::Epsilon => 0,
+            InputSymbol::StrLit(_) => 1,
+            InputSymbol::Named(_) => 2,
+            InputSymbol::NonTerminal(_) => 4,
+            InputSymbol::Regex(_) => 5,
+            InputSymbol::Eof => 6,
         }
     }
 
@@ -104,25 +122,26 @@ impl<'ast> InputToken<'ast> {
     }
 }
 
-impl<'ast> std::fmt::Display for InputToken<'ast> {
+impl<'ast> std::fmt::Display for InputSymbol<'ast> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            InputToken::StrLit(str_lit) => f.write_str(str_lit),
-            InputToken::Named(NamedInputToken { ty, .. }) => f.write_str(ty.as_ref()),
-            InputToken::Regex(regex) => f.write_str(regex),
-            InputToken::Epsilon => f.write_str("ε"),
-            InputToken::Eof => f.write_str("﹩"),
+            InputSymbol::StrLit(str_lit) => f.write_str(str_lit),
+            InputSymbol::Named(NamedSymbol { ty, .. }) => f.write_fmt(format_args!("{:?}", ty)),
+            InputSymbol::NonTerminal(non_terminal) => f.write_str(non_terminal.as_ref()),
+            InputSymbol::Regex(regex) => f.write_str(regex),
+            InputSymbol::Epsilon => f.write_str("ε"),
+            InputSymbol::Eof => f.write_str("﹩"),
         }
     }
 }
 
-impl<'ast> Ord for InputToken<'ast> {
+impl<'ast> Ord for InputSymbol<'ast> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.compare(other)
     }
 }
 
-impl<'ast> PartialOrd for InputToken<'ast> {
+impl<'ast> PartialOrd for InputSymbol<'ast> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.compare(other))
     }

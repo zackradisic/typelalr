@@ -1,15 +1,18 @@
 use regex_syntax::hir::Hir as RegexHir;
 use std::collections::BTreeMap;
 
-use crate::{option_usize::OptionUsize, parser::{Grammar}};
+use crate::{lalr::item::TokenIdx, option_usize::OptionUsize, parser::Grammar};
 
-use super::{dfa::DFA, nfa::{StateIdx, NFA}};
-
+use super::{
+    dfa::DFA,
+    nfa::{StateIdx, NFA},
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TokenDef {
     pub name: String,
     pub with_val: bool,
+    pub token_idx: Option<u32>,
 }
 
 impl TokenDef {
@@ -19,7 +22,6 @@ impl TokenDef {
             val: None,
         }
     }
-
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -52,11 +54,8 @@ impl Lex {
     pub fn from_grammar<'ast>(grammar: &Grammar<'ast>) -> Self {
         let mut tokens = Vec::new();
 
-        let input_tokens = grammar.iter_productions().map(|prod| prod.input_tokens.iter()).flatten();
-        
-
-        for tok in input_tokens {
-            let token_def_with_regex = match tok.to_token_def_with_regex() {
+        for (idx, tok) in grammar.tokens().enumerate() {
+            let token_def_with_regex = match tok.to_token_def_with_regex(TokenIdx(idx as u32)) {
                 Some(t) => t,
                 None => continue,
             };
@@ -66,7 +65,7 @@ impl Lex {
 
         Self::from_tokens(tokens)
     }
-    
+
     pub fn from_tokens(tokens: Vec<(TokenDef, RegexHir)>) -> Self {
         let mut tokens_with_nfa: Vec<_> = tokens
             .into_iter()
@@ -120,6 +119,30 @@ impl Lex {
             // tokens: tokens.into_iter().collect(),
             tokens: tokens.into_iter().map(|(k, tok)| (k, tok)).collect(),
         }
+    }
+
+    pub fn convert_tokens(&self, tokens: Vec<Token>) -> Vec<(Token, TokenIdx)> {
+        let def_map = self
+            .tokens
+            .iter()
+            .fold(BTreeMap::new(), |mut map, (_, def)| {
+                map.insert(def.name.as_str(), def);
+                map
+            });
+        tokens
+            .into_iter()
+            .map(|token| self.token_with_idx(token, &def_map))
+            .chain(std::iter::once((Token{ name: "EOF".into(), val: None}, Grammar::EOF_TOKEN_IDX)))
+            .collect()
+    }
+
+    fn token_with_idx(
+        &self,
+        token: Token,
+        def_map: &BTreeMap<&str, &TokenDef>,
+    ) -> (Token, TokenIdx) {
+        let def = def_map.get(token.name.as_str()).unwrap();
+        (token, TokenIdx(def.token_idx.unwrap()))
     }
 
     #[inline]
@@ -206,6 +229,7 @@ impl Lex {
             Some(TokenDef {
                 with_val: true,
                 name,
+                ..
             }) => {
                 // let val = char_vec.iter().collect::<String>();
                 let val = input[start..(end + 1)].to_string();
@@ -214,6 +238,7 @@ impl Lex {
             Some(TokenDef {
                 with_val: false,
                 name,
+                ..
             }) => Token::new(name.clone()),
             None => panic!(),
         };
@@ -247,6 +272,7 @@ mod test {
             TokenDef {
                 name: name.into(),
                 with_val: false,
+                token_idx: None,
             },
             Parser::new().parse(regex).unwrap(),
         )
@@ -257,6 +283,7 @@ mod test {
             TokenDef {
                 name: name.into(),
                 with_val: true,
+                token_idx: None,
             },
             Parser::new().parse(regex).unwrap(),
         )
@@ -324,7 +351,6 @@ mod test {
 
         assert_eq!(toks[0], tok("a*b+"));
     }
-
 
     #[test]
     fn precedence_tie() {

@@ -7,15 +7,15 @@ impl<'ast> ParserSupport<'ast> {
         Self { ast }
     }
 
-    pub fn alloc<T>(&mut self, val: T) -> &'ast mut T {
+    pub fn alloc<T>(&self, val: T) -> &'ast mut T {
         self.ast.alloc(val)
     }
 
-    pub fn alloc_str<'a>(&mut self, s: &'a str) -> &'ast mut str {
+    pub fn alloc_str<'a>(&self, s: &'a str) -> &'ast mut str {
         self.ast.alloc(s.chars().collect::<String>())
     }
 
-    pub fn alloc_quoted_str<'a>(&mut self, s: &'a str) -> &'ast mut str {
+    pub fn alloc_quoted_str<'a>(&self, s: &'a str) -> &'ast mut str {
         self.ast.alloc(
             s.chars()
                 .skip(1)
@@ -24,7 +24,7 @@ impl<'ast> ParserSupport<'ast> {
         )
     }
 
-    pub fn alloc_ts_code<'a>(&mut self, ts_code_with_paren: &'a str) -> &'ast mut str {
+    pub fn alloc_ts_code<'a>(&self, ts_code_with_paren: &'a str) -> &'ast mut str {
         self.ast.alloc(
             ts_code_with_paren
                 .chars()
@@ -34,7 +34,7 @@ impl<'ast> ParserSupport<'ast> {
         )
     }
 
-    pub fn alloc_regex<'a>(&mut self, regex_str_with_quotes: &'a str) -> &'ast mut str {
+    pub fn alloc_regex<'a>(&self, regex_str_with_quotes: &'a str) -> &'ast mut str {
         if regex_str_with_quotes.len() < 3 {
             return self.ast.alloc("".to_owned());
         }

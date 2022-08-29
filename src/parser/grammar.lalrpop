@@ -21,19 +21,19 @@ pub Production: Production<'ast> = {
 }
 
 pub ProductionBody: ProductionBody<'ast> = {
-    <input_tokens: InputToken+> "=>" <ts_code: TsCode> => ProductionBody {
+    <input_tokens: Symbol+> "=>" <ts_code: TsCode> => ProductionBody {
         input_tokens,
         mapping_fn: ts_code,
     }
 }
 
-pub InputToken: InputToken<'ast> = {
-    r#""[^"]*""# => InputToken::StrLit(support.alloc_quoted_str(<>)),
-    "<" <name: Ident> ":" <ty: Ident> ">" => InputToken::Named(support.alloc(NamedInputToken {
+pub Symbol: InputSymbol<'ast> = {
+    r#""[^"]*""# => InputSymbol::StrLit(support.alloc_quoted_str(<>)),
+    "<" <name: Ident> ":" <ty: Ident> ">" => InputSymbol::Named(support.alloc(NamedSymbol {
         name: Some(name),
-        ty
+        ty: support.alloc(InputSymbol::NonTerminal(ty)),
     })),
-   "r" <regex: r#""[^"]*""#>  => InputToken::Regex(support.alloc_regex(regex))
+   "r" <regex: r#""[^"]*""#>  => InputSymbol::Regex(support.alloc_regex(regex))
 }
 
 pub Ident: Ident<'ast> = {

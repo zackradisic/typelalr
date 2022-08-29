@@ -7,7 +7,7 @@ use std::{
 use indexmap::IndexSet;
 
 use crate::parser::{
-    ast::{Ident, InputToken, NamedInputToken},
+    ast::{Ident, InputSymbol, NamedSymbol},
     Grammar, Production,
 };
 
@@ -71,12 +71,12 @@ impl Item {
         grammar.get_production(self.production_idx()).unwrap()
     }
 
-    pub fn dot_token<'ast>(self, grammar: &'ast Grammar<'ast>) -> Option<&'ast InputToken<'ast>> {
+    pub fn dot_token<'ast>(self, grammar: &'ast Grammar<'ast>) -> Option<&'ast InputSymbol<'ast>> {
         let production = grammar.get_production(self.production_idx()).unwrap();
         production.input_tokens.get(self.dot() as usize)
     }
 
-    pub fn last_token<'ast>(self, grammar: &'ast Grammar<'ast>) -> &'ast InputToken<'ast> {
+    pub fn last_token<'ast>(self, grammar: &'ast Grammar<'ast>) -> &'ast InputSymbol<'ast> {
         let production = grammar.get_production(self.production_idx()).unwrap();
         production.input_tokens.last().unwrap()
     }
@@ -84,12 +84,13 @@ impl Item {
     fn dot_production_name<'ast>(self, grammar: &'ast Grammar<'ast>) -> Option<Ident<'ast>> {
         let this_production: &Production = grammar.get_production(self.production_idx()).unwrap();
 
-        match this_production.input_tokens.get(self.dot() as usize)? {
-            InputToken::Named(NamedInputToken { ty, .. }) => Some(*ty),
-            InputToken::Eof
-            | InputToken::Epsilon
-            | InputToken::Regex(_)
-            | InputToken::StrLit(_) => None,
+        match this_production
+            .input_tokens
+            .get(self.dot() as usize)
+            .and_then(|symbol| symbol.as_non_terminal())
+        {
+            Some(non_terminal) => Some(*non_terminal),
+            _ => None,
         }
     }
 
@@ -262,7 +263,7 @@ impl ItemSet {
         }
     }
 
-    pub fn goto<'ast>(&self, x: &InputToken, grammar: &'ast Grammar<'ast>) -> Self {
+    pub fn goto<'ast>(&self, x: &InputSymbol, grammar: &'ast Grammar<'ast>) -> Self {
         let mut j = BTreeMap::<Item, BTreeSet<TokenIdx>>::default();
 
         for (item, lookahead_set) in self.0.iter() {
@@ -332,7 +333,7 @@ impl std::hash::Hash for ItemSet {
 }
 
 impl<'ast> Iterator for ItemIter<'ast> {
-    type Item = &'ast InputToken<'ast>;
+    type Item = &'ast InputSymbol<'ast>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let cur_idx = self.item.dot();
