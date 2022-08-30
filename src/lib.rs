@@ -1,5 +1,5 @@
 use bumpalo::Bump;
-use parser::{ast, Grammar};
+use parser::ast;
 
 pub mod codegen;
 pub mod lalr;

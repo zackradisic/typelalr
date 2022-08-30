@@ -73,12 +73,15 @@ impl<'ast> Lalr<'ast> {
 
         loop {
             let s = stack.last().expect("Stack is empty").clone();
-            println!("STACK: {:?}", stack);
-            println!("S={:?} TOKEN {:?}: {:?}", s, a_idx, a);
+            // println!("STACK: {:?}", stack);
+            // println!("S={:?} TOKEN {:?}: {:?}", s, a_idx, a);
 
             match self.action.try_index((s, a_idx)) {
                 Some(Action::Shift(new_state_idx)) => {
                     stack.push(*new_state_idx);
+
+                    // println!("  shifting {}", *new_state_idx);
+
                     next_token(&mut a, &mut a_idx, &mut i, tokens);
                 }
                 Some(Action::Reduce(prod_idx)) => {
@@ -87,8 +90,19 @@ impl<'ast> Lalr<'ast> {
                         .get_production(*prod_idx)
                         .expect("Production is undefined");
                     let new_len = stack.len() - production.input_tokens.len();
+
+                    // println!(
+                    //     "  STACK LEN {} PROD LEN {} NEW LEN {}",
+                    //     stack.len(),
+                    //     production.input_tokens.len(),
+                    //     new_len
+                    // );
                     stack.truncate(new_len);
-                    println!("  truncated STACK: {:?}", stack);
+
+                    // println!("  reducing by {:?}", production.debug(&self.grammar));
+                    // println!("  truncated STACK: {:?}", stack);
+
+                    // println!("  new top: {:?}", stack.last().expect("Stack is empty"));
 
                     let goto_ta = *self
                         .goto
@@ -98,13 +112,16 @@ impl<'ast> Lalr<'ast> {
                     stack.push(goto_ta as u32);
                     println!("  pushing ({}) => STACK: {:?}", goto_ta, stack);
 
-                    println!(
-                        "Outputting production: {} {:?}",
-                        production.name.as_ref(),
-                        prod_idx
-                    );
+                    // println!(
+                    //     "Outputting production: {} ({:?})",
+                    //     production.name.as_ref(),
+                    //     prod_idx
+                    // );
                 }
-                Some(Action::Accept) => break,
+                Some(Action::Accept) => {
+                    // println!("Accepting!");
+                    break;
+                }
                 None => panic!(
                     "Invalid token: {:?}\nValid: {:?}",
                     a,
@@ -150,14 +167,52 @@ mod test {
 
         let lalr = Lalr::new(grammar);
 
-        let noob = lalr.parse("ccdd");
+        let noob = lalr.parse("cdd");
     }
 
     #[test]
-    fn lisp() {
+    fn basic_ops() {
         let grammar_str = r#"
             export start Exprs = [
-                <e1: Expr> "plus" <e2: Expr> => ("nice"),
+                Expr Expr => ("nice"),
+                Expr => ("also nice")
+            ]
+
+            export Expr = [ 
+                <int: Int> => ({ kind: "int", int })
+            ]
+
+            export Int = [
+                r"[1-9][0-9]*" => ("lol")
+            ]
+        "#;
+        let bump = Bump::new();
+        let ast = parse_grammar(&bump, grammar_str);
+        let grammar = Grammar::grammar_from_ast_productions(&bump, &ast);
+
+        // println!(
+        //     "PRODUCTION NAMES: {:#?}",
+        //     grammar
+        //         .iter_productions()
+        //         .map(|production| production)
+        //         .collect::<Vec<_>>()
+        // );
+
+        // println!(
+        //     "TOKENS: {:#?}",
+        //     grammar.tokens().enumerate().collect::<Vec<_>>()
+        // );
+
+        let lalr = Lalr::new(grammar);
+
+        let noob = lalr.parse("42 420");
+    }
+
+    #[test]
+    fn basic_ops2() {
+        let grammar_str = r#"
+            export start Exprs = [
+                Expr Exprs => ("nice"),
                 Expr => ("also nice")
             ]
 
@@ -185,6 +240,45 @@ mod test {
 
         let lalr = Lalr::new(grammar);
 
-        let noob = lalr.parse("42 plus 420");
+        let noob = lalr.parse("42 420 69 9001");
+    }
+
+    #[test]
+    fn lisp() {
+        let grammar_str = r#"
+            export start SExpr = [
+                "(" <exprs: Exprs> ")" => ("LMAO")
+            ]
+
+            export Exprs = [
+                Expr Exprs => ("nice"),
+                Expr => ("also nice")
+            ]
+
+            export Expr = [ 
+                <int: Int> => ({ kind: "int", int }),
+                <str: Symbol> => ({ kind: "str", str }),
+            ]
+
+            export Int = [
+                r"[1-9][0-9]*" => ("lol")
+            ]
+
+            export Symbol = [
+                r"[^() ]*" => ("lol")
+            ]
+        "#;
+        let bump = Bump::new();
+        let ast = parse_grammar(&bump, grammar_str);
+        let grammar = Grammar::grammar_from_ast_productions(&bump, &ast);
+
+        // println!(
+        //     "TOKENS: {:#?}",
+        //     grammar.tokens().enumerate().collect::<Vec<_>>()
+        // );
+
+        let lalr = Lalr::new(grammar);
+
+        let noob = lalr.parse("(add 35 34)");
     }
 }

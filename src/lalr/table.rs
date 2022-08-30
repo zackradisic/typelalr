@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{btree_map::Entry, BTreeMap},
     mem::ManuallyDrop,
     ops::{Deref, Index},
 };
@@ -7,9 +7,12 @@ use std::{
 use bit_vec::BitVec;
 use indexmap::{IndexMap, IndexSet};
 
-use crate::parser::{
-    ast::{Ident, InputSymbol},
-    Grammar, Symbol,
+use crate::{
+    lalr::item::ItemSetDebug,
+    parser::{
+        ast::{Ident, InputSymbol},
+        Grammar, Symbol,
+    },
 };
 
 use super::item::{ItemSet, ProductionIdx, TokenIdx};
@@ -31,6 +34,9 @@ pub type ActionTable = Table<TokenIdx, Action>;
 pub type GotoTable<'ast> = Table<Ident<'ast>, usize>;
 
 impl<K: Ord, V> Table<K, V> {
+    pub fn empty() -> Self {
+        Self(BTreeMap::new())
+    }
     pub fn try_index(&self, (outer_idx, inner_idx): (u32, K)) -> Option<&V> {
         match self.0.get(&(outer_idx as usize)) {
             Some(inner) => inner.get(&inner_idx),
@@ -40,6 +46,23 @@ impl<K: Ord, V> Table<K, V> {
 
     pub fn valid(&self, outer_idx: u32) -> Option<std::collections::btree_map::Keys<K, V>> {
         self.0.get(&(outer_idx as usize)).map(BTreeMap::keys)
+    }
+
+    pub fn entry(&mut self, (outer_idx, inner_idx): (u32, K)) -> Entry<K, V> {
+        self.0
+            .entry(outer_idx as usize)
+            .or_insert_with(BTreeMap::new)
+            .entry(inner_idx)
+    }
+
+    pub fn insert(&mut self, (outer_idx, inner_idx): (u32, K), val: V) -> Option<V> {
+        match self.entry((outer_idx, inner_idx)) {
+            Entry::Vacant(entry) => {
+                entry.insert(val);
+                None
+            }
+            Entry::Occupied(mut entry) => Some(entry.insert(val)),
+        }
     }
 }
 
@@ -58,6 +81,10 @@ pub fn make_tables<'ast>(
 
     let (lalr_set, lr_to_lalr) = merge_cores(&lr_items);
 
+    for (i, item_set) in lalr_set.iter().enumerate() {
+        println!("{} {:#?}", i, ItemSetDebug(item_set, &grammar));
+    }
+
     let (action, goto) = make_lalr_tables(grammar, &lalr_set, &lr_items, &lr_to_lalr);
 
     (action, goto, lalr_set)
@@ -69,8 +96,8 @@ pub fn make_lalr_tables<'ast>(
     lr_sets: &IndexSet<ItemSet>,
     lr_to_lalr: &BTreeMap<usize, usize>,
 ) -> (ActionTable, GotoTable<'ast>) {
-    let mut action: TableInner<TokenIdx, Action> = Default::default();
-    let mut goto: TableInner<Ident<'ast>, usize> = Default::default();
+    let mut action: ActionTable = ActionTable::empty();
+    let mut goto: GotoTable = GotoTable::empty();
 
     #[inline]
     fn compute_goto<'ast>(
@@ -104,6 +131,8 @@ pub fn make_lalr_tables<'ast>(
         for (item, lookaheads) in item_set.iter() {
             let dot_value = item.dot_token(grammar);
 
+            // A dot value of Some(Symbol) means the dot is not at the end
+            // Otherwise we are at the end of the production, ex/ S ⇒  C C⋅
             if let Some(dot_value) = dot_value {
                 if dot_value.is_terminal() {
                     let token_idx = grammar.get_token_idx(dot_value).unwrap();
@@ -116,28 +145,36 @@ pub fn make_lalr_tables<'ast>(
                         None => continue,
                     };
 
-                    action
-                        .entry(i)
-                        .or_insert_with(BTreeMap::new)
-                        .insert(token_idx, Action::Shift(j as u32));
+                    match action.entry((i as u32, token_idx)) {
+                        Entry::Vacant(entry) => entry.insert(Action::Shift(j as u32)),
+                        Entry::Occupied(_) => panic!("Conflict ({}, {:?})", i, token_idx),
+                    };
                 }
                 continue;
             }
 
-            // Otherwise we are at the end of the production, ex/ S ⇒  C C⋅
-            if item.production_idx() == Grammar::AUGMENTED_START_PRODUCTION_IDX {
-                action
-                    .entry(i)
-                    .or_insert_with(BTreeMap::new)
-                    .insert(Grammar::EOF_TOKEN_IDX, Action::Accept);
-                continue;
-            }
-
             for lookahead in lookaheads {
-                action
-                    .entry(i)
-                    .or_insert_with(BTreeMap::new)
-                    .insert(*lookahead, Action::Reduce(item.production_idx()));
+                if *lookahead == Grammar::EOF_TOKEN_IDX
+                    && item.production_idx() == Grammar::AUGMENTED_START_PRODUCTION_IDX
+                {
+                    match action.entry((i as u32, Grammar::EOF_TOKEN_IDX)) {
+                        Entry::Vacant(entry) => entry.insert(Action::Accept),
+                        Entry::Occupied(entry) => {
+                            panic!(
+                                "Conflict ({}, {:?}), Current: {:?}",
+                                i,
+                                Grammar::EOF_TOKEN_IDX,
+                                entry.get()
+                            )
+                        }
+                    };
+                    continue;
+                }
+
+                match action.entry((i as u32, *lookahead)) {
+                    Entry::Vacant(entry) => entry.insert(Action::Reduce(item.production_idx())),
+                    Entry::Occupied(_) => panic!("Conflict ({}, {:?})", i, lookahead),
+                };
             }
         }
     }
@@ -158,20 +195,26 @@ pub fn make_lalr_tables<'ast>(
     for (i, state) in lalr_sets.iter().enumerate() {
         for (token_idx, non_terminal_name) in grammar.non_terminals() {
             let production_name = token_idx_to_production_name.get(&token_idx).unwrap();
-            // let goto_ia = state.goto(&Symbol::NonTerminal(*non_terminal_name), grammar);
             let goto_ia = state.goto(non_terminal_name, grammar);
-            match lalr_sets.get_index_of(&goto_ia) {
+
+            match lr_sets.get_index_of(&goto_ia) {
                 Some(j) => {
-                    goto.entry(i)
-                        .or_insert_with(BTreeMap::new)
-                        .insert(*production_name, j);
+                    goto.insert(
+                        (i as u32, *production_name),
+                        *lr_to_lalr.get(&j).expect("LR -> LALR"),
+                    );
                 }
-                None => (),
+                None => match lalr_sets.get_index_of(&goto_ia) {
+                    Some(j) => {
+                        goto.insert((i as u32, *production_name), j);
+                    }
+                    None => (),
+                },
             }
         }
     }
 
-    (Table(action), Table(goto))
+    (action, goto)
 }
 
 pub fn merge_cores(lalr_sets: &IndexSet<ItemSet>) -> (IndexSet<ItemSet>, BTreeMap<usize, usize>) {

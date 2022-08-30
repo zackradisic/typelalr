@@ -183,7 +183,7 @@ impl<'ast> Symbol<'ast> {
                     with_val: false,
                     token_idx: Some(token_idx),
                 },
-                RegexParser::new().parse(str_lit).unwrap(),
+                RegexParser::new().parse(&regex::escape(str_lit)).unwrap(),
             )),
             Symbol::Regex(regex) => Some((
                 TokenDef {
@@ -249,6 +249,9 @@ impl<'ast> std::fmt::Display for Symbol<'ast> {
 }
 
 impl<'ast> Production<'ast> {
+    pub fn debug<'a>(&'a self, grammar: &'a Grammar<'ast>) -> ProductionDebug<'a, 'ast> {
+        ProductionDebug(self, grammar)
+    }
     pub fn from_ast(
         prod: &'ast ast::Production<'ast>,
         prod_body: &'ast ast::ProductionBody<'ast>,
@@ -275,5 +278,24 @@ impl<'ast> Iterator for ProductionIter<'ast> {
         self.productions
             .get(next_production_idx.0 as usize)
             .map(|production| (*next_production_idx, production))
+    }
+}
+
+/* DEBUG STUFF */
+pub struct ProductionDebug<'a, 'ast>(&'a Production<'ast>, &'a Grammar<'ast>);
+
+impl<'a, 'ast> std::fmt::Debug for ProductionDebug<'a, 'ast> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.0.name.as_ref())?;
+        f.write_str(" ⇒  ")?;
+        let last = if self.0.input_tokens.is_empty() {
+            0
+        } else {
+            self.0.input_tokens.len() - 1
+        };
+        for (i, token) in self.0.input_tokens.iter().enumerate() {
+            write!(f, "{}{}", token, if last == i { "" } else { " " })?;
+        }
+        Ok(())
     }
 }

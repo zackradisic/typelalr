@@ -6,10 +6,7 @@ use std::{
 
 use indexmap::IndexSet;
 
-use crate::parser::{
-    ast::{Ident, InputSymbol, NamedSymbol},
-    Grammar, Production, Symbol,
-};
+use crate::parser::{ast::Ident, Grammar, Production, Symbol};
 
 use super::first::first;
 
@@ -278,14 +275,9 @@ impl ItemSet {
 
             let new_item = item.increment();
             for lookahead in lookahead_set.iter() {
-                match j.entry(new_item) {
-                    Entry::Vacant(entry) => {
-                        entry.insert(BTreeSet::from_iter([*lookahead]));
-                    }
-                    Entry::Occupied(mut entry) => {
-                        entry.get_mut().insert(*lookahead);
-                    }
-                }
+                j.entry(new_item)
+                    .or_insert_with(BTreeSet::new)
+                    .insert(*lookahead);
             }
         }
 
