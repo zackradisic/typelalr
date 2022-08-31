@@ -48,6 +48,7 @@ impl<'ast> Lalr<'ast> {
     fn parse_impl(&self, tokens: &[(Token, TokenIdx)]) -> String {
         let ret = String::new();
         let mut stack = vec![0u32];
+        let mut token_stack = Vec::<&Token>::new();
 
         let mut i = 0;
         let tok = &tokens[i];
@@ -68,8 +69,19 @@ impl<'ast> Lalr<'ast> {
             }
         }
 
-        // println!("ACTION: {:#?}", self.action);
-        // println!("GOTO: {:#?}", self.goto);
+        println!(
+            "PRODUCTIONS: {:#?}",
+            self.grammar
+                .iter_productions()
+                .enumerate()
+                .collect::<Vec<_>>()
+        );
+        println!(
+            "TOKENS: {:#?}",
+            self.grammar.tokens().enumerate().collect::<Vec<_>>()
+        );
+        println!("ACTION: {:#?}", self.action);
+        println!("GOTO: {:#?}", self.goto);
 
         loop {
             let s = stack.last().expect("Stack is empty").clone();
@@ -82,6 +94,7 @@ impl<'ast> Lalr<'ast> {
 
                     // println!("  shifting {}", *new_state_idx);
 
+                    token_stack.push(a);
                     next_token(&mut a, &mut a_idx, &mut i, tokens);
                 }
                 Some(Action::Reduce(prod_idx)) => {
@@ -97,9 +110,13 @@ impl<'ast> Lalr<'ast> {
                     //     production.input_tokens.len(),
                     //     new_len
                     // );
-                    stack.truncate(new_len);
 
-                    // println!("  reducing by {:?}", production.debug(&self.grammar));
+                    stack.truncate(new_len);
+                    println!("  reducing by {:?}", production.debug(&self.grammar));
+
+                    // let (left, right) = token_stack.split_at(new_len);
+                    // println!("RIGHT: {:#?}\nLEFT: {:#?}", right, left);
+
                     // println!("  truncated STACK: {:?}", stack);
 
                     // println!("  new top: {:?}", stack.last().expect("Stack is empty"));
@@ -147,13 +164,13 @@ mod test {
     #[test]
     fn basic() {
         let grammar_str = r#"
-            export start S = [ 
-                <c1: C> <c2: C> => ("nothing to see here")
+            export start S: ({ kind: "S", left: C, right: C }) = [ 
+                <c1: C> <c2: C> => ({ kind: "S", left: c1, right: c2 })
             ]
 
-            export C = [
-                "c" <c: C> => ("OK"),
-                "d" => ("noob")
+            export C: ({ kind: "C", values: string[] }) = [
+                <c1: "c"> <c2: C> => ({ kind: "C", values: [...c2['values']] }),
+                <d: "d"> => ({ kind: "C", values: [d]})
             ]
         "#;
         let bump = Bump::new();

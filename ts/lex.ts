@@ -1,5 +1,6 @@
 import { Characters, CharTable } from "./chars";
-import { States, Tokens, DFAtoNFA } from "./lex_state.gen";
+// import { States, Tokens, DFAtoNFA } from "./lex_state.gen";
+import { States, Tokens, DFAtoNFA } from "./lex_state_basic.gen";
 import * as U from "./util";
 
 export type CharRange = {
@@ -54,7 +55,7 @@ type TokenDefToToken<
     ? tokenDef["hasValue"] extends true
       ? {
           kind: tokenDef["kind"];
-          value: U.Substring<input, lexemeBegin, forward>;
+          value: U.Substring<input, lexemeBegin, U.Succ<forward>>;
         }
       : { kind: tokenDef["kind"] }
     : never
@@ -139,7 +140,7 @@ type LexImpl<
                   lastAcceptingState[1],
                   inputStr,
                   lexemeBegin,
-                  forward
+                  lastAcceptingState[0]
                 >,
                 ...tokens
               ],
@@ -174,7 +175,7 @@ type LexImpl<
     : `invalid char: ${char}`
   : [tokens, lastAcceptingState, lexemeBegin, undefined];
 
-type Lex<fullInput extends string> = LexImpl<
+export type Lex<fullInput extends string> = LexImpl<
   fullInput,
   StringToCharList<fullInput, []>,
   0,
@@ -197,6 +198,8 @@ type Lex<fullInput extends string> = LexImpl<
         ? lexemeBegin extends number
           ? U.Reverse<
               [
+                { kind: "EOF" },
+                // `lexemeBegin: ${lexemeBegin} forward: ${lastAcceptingState[0]}`,
                 TokenDefToToken<
                   lastAcceptingState[1],
                   fullInput,
@@ -210,10 +213,15 @@ type Lex<fullInput extends string> = LexImpl<
         : lastAcceptingState[1]
       : "unreachable: tokens should be an array"
     : tokens extends any[]
-    ? U.Reverse<tokens>
+    ? U.Reverse<[{ kind: "EOF" }, ...tokens]>
     : "unreachable: tokens should be an array"
   : "unreachable: inferring `tokens` and `lastAcceptingState` should always work";
 
+// type toks = Lex<`
+//     let foo = 420;
+// `>;
+
 type toks = Lex<`
-    let foo = 420; 
+  ccdd
 `>;
+type toks2 = Lex<`ccdd`>;

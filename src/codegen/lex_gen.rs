@@ -404,4 +404,15 @@ mod test {
         let str = generate(lexer);
         std::fs::write("./ts/lex_state.gen.ts", str).unwrap();
     }
+
+    #[test]
+    fn basic_gen() {
+        let tokens = vec![new_token_val("c", "c"), new_token_val("d", "d")];
+        let lexer = Lex::from_tokens(tokens.clone());
+        // let tokens = lexer.lex("let x = 420");
+        // println!("TOKENS: {:?}", tokens);
+
+        let str = generate(lexer);
+        std::fs::write("./ts/lex_state_basic.gen.ts", str).unwrap();
+    }
 }

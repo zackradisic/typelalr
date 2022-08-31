@@ -85,3 +85,23 @@ export type Add<A extends number, B extends number> = B extends 0
 export type Sub<A extends number, B extends number> = B extends 0
   ? A
   : Sub<Pred<A>, Pred<B>>;
+
+export type PopNStack<arr extends any[], n extends number> = n extends 0
+  ? arr
+  : arr extends [infer head, ...infer tail]
+  ? PopNStack<tail, Pred<n>>
+  : never;
+
+export type PopNStackWithValue<
+  arr extends any[],
+  n extends number
+> = PopNStackWithValueImpl<arr, n, []>;
+type PopNStackWithValueImpl<
+  arr extends any[],
+  n extends number,
+  ret extends any[]
+> = n extends 0
+  ? [arr, ret]
+  : arr extends [infer head, ...infer tail]
+  ? PopNStackWithValueImpl<tail, Pred<n>, [head, ...ret]>
+  : never;

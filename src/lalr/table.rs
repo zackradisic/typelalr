@@ -81,9 +81,9 @@ pub fn make_tables<'ast>(
 
     let (lalr_set, lr_to_lalr) = merge_cores(&lr_items);
 
-    for (i, item_set) in lalr_set.iter().enumerate() {
-        println!("{} {:#?}", i, ItemSetDebug(item_set, &grammar));
-    }
+    // for (i, item_set) in lalr_set.iter().enumerate() {
+    //     println!("{} {:#?}", i, ItemSetDebug(item_set, &grammar));
+    // }
 
     let (action, goto) = make_lalr_tables(grammar, &lalr_set, &lr_items, &lr_to_lalr);
 

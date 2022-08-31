@@ -183,6 +183,7 @@ impl Lex {
                     if let Some((last_accepting_idx, last_accepting_state_idx)) =
                         last_accepting_state
                     {
+            println!("LEXEME_BEGIN: {} FORWARD: {}", lexeme_begin, last_accepting_idx);
                         let tok = self.make_tok(
                             input,
                             lexeme_begin,
@@ -207,6 +208,7 @@ impl Lex {
         }
 
         if let Some((_last_accepting_idx, last_accepting_state_idx)) = last_accepting_state {
+            println!("LEXEME_BEGIN: {} FORWARD: {}", lexeme_begin, _last_accepting_idx);
             tokens.push(self.make_tok(
                 input,
                 lexeme_begin,
@@ -301,6 +303,14 @@ mod test {
             name: s.into(),
             val: Some(Box::new(val.into())),
         }
+    }
+
+    #[test]
+    fn sanity() {
+        let tokens = vec![new_token_val("c", "c"), new_token_val("d", "d")];
+        let lexer = Lex::from_tokens(tokens.clone());
+        let toks = lexer.lex("cdd");
+        println!("TOKS: {:#?}", toks);
     }
 
     #[test]

@@ -10,6 +10,7 @@ pub struct Production<'ast> {
     pub name: Ident<'ast>,
     pub bodies: Vec<ProductionBody<'ast>>,
     pub is_start: bool,
+    pub ts_code: &'ast str,
 }
 
 #[derive(Debug, PartialEq)]

@@ -40,6 +40,7 @@ pub struct Production<'ast> {
     pub name: Ident<'ast>,
     pub input_tokens: Vec<Symbol<'ast>>,
     pub mapping_fn: Option<&'ast str>,
+    pub ts_type: Option<&'ast str>,
 }
 
 pub struct ProductionIter<'ast> {
@@ -71,6 +72,7 @@ impl<'ast> Grammar<'ast> {
             name: augmented_start_name,
             input_tokens: vec![Symbol::NonTerminal(start_symbol.name)],
             mapping_fn: None,
+            ts_type: None,
         });
 
         for ast_prod in ast_productions {
@@ -95,8 +97,7 @@ impl<'ast> Grammar<'ast> {
                 token_set.insert(input_token.clone());
             }
         }
-        let mut tokens = Vec::with_capacity(1 + token_set.len());
-        tokens.push(Symbol::Eof);
+        let mut tokens = Vec::with_capacity(token_set.len());
         tokens.extend(token_set);
 
         Self {
@@ -180,7 +181,7 @@ impl<'ast> Symbol<'ast> {
             Symbol::StrLit(str_lit) => Some((
                 TokenDef {
                     name: str_lit.to_string(),
-                    with_val: false,
+                    with_val: true,
                     token_idx: Some(token_idx),
                 },
                 RegexParser::new().parse(&regex::escape(str_lit)).unwrap(),
@@ -264,6 +265,7 @@ impl<'ast> Production<'ast> {
                 .map(|sym| sym.lower())
                 .collect(),
             mapping_fn: Some(prod_body.mapping_fn),
+            ts_type: Some(prod.ts_code),
         }
     }
 }

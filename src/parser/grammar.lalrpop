@@ -8,32 +8,38 @@ pub Program: Vec<Production<'ast>> = {
 }
 
 pub Production: Production<'ast> = {
-    "export"? <ident: Ident> "=" "[" <bodies: Comma<ProductionBody>> "]" => Production {
+    "export"? <ident: Ident> ":" <ts_type: TsCode> "=" "[" <bodies: Comma<ProductionBody>> "]" => Production {
         name: ident,
         bodies,
         is_start: false,
+        ts_code: ts_type,
     },
-    "export" "start" <ident: Ident> "=" "[" <bodies: Comma<ProductionBody>> "]" => Production {
+    "export" "start" <ident: Ident> ":" <ts_type: TsCode> "=" "[" <bodies: Comma<ProductionBody>> "]" => Production {
         name: ident,
         bodies,
         is_start: true,
+        ts_code: ts_type,
     }
 }
 
 pub ProductionBody: ProductionBody<'ast> = {
-    <input_tokens: Symbol+> "=>" <ts_code: TsCode> => ProductionBody {
+    <input_tokens: NamedSymbol+> "=>" <ts_code: TsCode> => ProductionBody {
         input_tokens,
         mapping_fn: ts_code,
     }
 }
 
+pub NamedSymbol: InputSymbol<'ast> = {
+    "<" <name: Ident> ":" <ty: Symbol> ">" => InputSymbol::Named(support.alloc(NamedSymbol {
+        name: Some(name),
+        ty: support.alloc(ty),
+    })),
+    Symbol,
+}
+
 pub Symbol: InputSymbol<'ast> = {
     r#""(\\\\|\\"|[^"\\])*""# => InputSymbol::StrLit(support.alloc_quoted_str(<>)),
     <name: Ident> => InputSymbol::NonTerminal(name),
-    "<" <name: Ident> ":" <ty: Ident> ">" => InputSymbol::Named(support.alloc(NamedSymbol {
-        name: Some(name),
-        ty: support.alloc(InputSymbol::NonTerminal(ty)),
-    })),
    "r" <regex: r#""(\\\\|\\"|[^"\\])*""#>  => InputSymbol::Regex(support.alloc_regex(regex))
 }
 

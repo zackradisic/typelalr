@@ -5,6 +5,18 @@ E? =   E
      | ε
 ```
 
-## store token values for outputting productions
-we need to store the values of tokens we shift so 
-they can be used when outputting productions
+## code generation!
+generate pretty much everything in `parse_state.gen.ts`:
+* Symbol (production outputs)
+* Token (inputs for production functions)
+* Production (just a regular declaration)
+* Tokens 
+* Productions
+* Action
+* Goto
+* TokenKindToIdx
+* actions module
+  * variants of Symbol
+  * action impls (they are light-wrappers over user defined production fns)
+  * actions (they do the popping of the symbol stack and all that other BS)
+  * EmitProduction (just dispatching the actions)
