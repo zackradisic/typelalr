@@ -16,10 +16,10 @@ pub mod item;
 pub mod table;
 
 pub struct Lalr<'ast> {
-    grammar: Grammar<'ast>,
-    lexer: Lex,
-    action: ActionTable,
-    goto: GotoTable<'ast>,
+    pub(crate) grammar: Grammar<'ast>,
+    pub(crate) lexer: Lex,
+    pub(crate) action: ActionTable,
+    pub(crate) goto: GotoTable<'ast>,
     states: IndexSet<ItemSet>,
 }
 

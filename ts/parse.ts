@@ -141,5 +141,5 @@ type Parse<tokenInputs extends L.Token[]> =
       : "error: `input` should always be a number[] or string"
     : "unreachable: inferring `input` never fails";
 
-type tokens = L.Lex<"cdd">;
+type tokens = L.Lex<"('add' 42 50)">;
 type result = Parse<tokens>;

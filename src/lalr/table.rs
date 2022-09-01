@@ -64,6 +64,10 @@ impl<K: Ord, V> Table<K, V> {
             Entry::Occupied(mut entry) => Some(entry.insert(val)),
         }
     }
+
+    pub fn iter(&self) -> std::collections::btree_map::Iter<usize, BTreeMap<K, V>> {
+        self.0.iter()
+    }
 }
 
 impl<K, V> Deref for Table<K, V> {

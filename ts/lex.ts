@@ -1,6 +1,6 @@
 import { Characters, CharTable } from "./chars";
 // import { States, Tokens, DFAtoNFA } from "./lex_state.gen";
-import { States, Tokens, DFAtoNFA } from "./lex_state_basic.gen";
+import { States, Tokens, DFAtoNFA } from "./lex_state.gen";
 import * as U from "./util";
 
 export type CharRange = {
@@ -194,7 +194,7 @@ export type Lex<fullInput extends string> = LexImpl<
     ? error
     : lastAcceptingState extends [forward: number, stateIdx: number]
     ? tokens extends any[]
-      ? lastAcceptingState[1] extends keyof Tokens
+      ? lastAcceptingState[1] extends number
         ? lexemeBegin extends number
           ? U.Reverse<
               [
@@ -210,7 +210,7 @@ export type Lex<fullInput extends string> = LexImpl<
               ]
             >
           : "unreachable: `lexemeBegin` begin should always be a number"
-        : lastAcceptingState[1]
+        : lastAcceptingState
       : "unreachable: tokens should be an array"
     : tokens extends any[]
     ? U.Reverse<[{ kind: "EOF" }, ...tokens]>
@@ -225,3 +225,4 @@ type toks = Lex<`
   ccdd
 `>;
 type toks2 = Lex<`ccdd`>;
+type tokens = Lex<"420 + 32">;

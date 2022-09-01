@@ -21,6 +21,7 @@ use self::ast::Ident;
 #[derive(Debug)]
 pub struct Grammar<'ast> {
     production_name_map: BTreeMap<Ident<'ast>, Vec<ProductionIdx>>,
+    ast_production_body_to_production_idx: BTreeMap<usize, usize>,
     productions: Vec<Production<'ast>>,
     tokens: Vec<Symbol<'ast>>,
     augmented_start_name: Ident<'ast>,
@@ -58,6 +59,7 @@ impl<'ast> Grammar<'ast> {
         bump: &'ast Bump,
         ast_productions: &'ast [ast::Production<'ast>],
     ) -> Self {
+        let mut ast_production_body_to_production_idx = BTreeMap::new();
         let mut production_name_map: BTreeMap<Ident, Vec<ProductionIdx>> = BTreeMap::new();
         let mut productions = Vec::new();
 
@@ -91,13 +93,14 @@ impl<'ast> Grammar<'ast> {
             }
         }
 
-        let mut token_set: BTreeSet<Symbol> = BTreeSet::from_iter([Symbol::Eof]);
+        let mut token_set: BTreeSet<Symbol> = BTreeSet::new();
         for prod in productions.iter() {
             for input_token in prod.input_tokens.iter() {
                 token_set.insert(input_token.clone());
             }
         }
-        let mut tokens = Vec::with_capacity(token_set.len());
+        let mut tokens = Vec::with_capacity(1 + token_set.len());
+        tokens.push(Symbol::Eof);
         tokens.extend(token_set);
 
         Self {
@@ -105,6 +108,7 @@ impl<'ast> Grammar<'ast> {
             productions,
             tokens,
             augmented_start_name,
+            ast_production_body_to_production_idx,
         }
     }
 
@@ -175,6 +179,25 @@ impl<'ast> Grammar<'ast> {
 }
 
 impl<'ast> Symbol<'ast> {
+    pub fn to_token_def(&self, token_idx: TokenIdx) -> Option<TokenDef> {
+        let token_idx = token_idx.0;
+        match self {
+            Symbol::StrLit(str_lit) => Some(TokenDef {
+                name: str_lit.to_string(),
+                with_val: true,
+                token_idx: Some(token_idx),
+            }),
+            Symbol::Regex(regex) => Some(TokenDef {
+                name: regex.to_string(),
+                with_val: true,
+                token_idx: Some(token_idx),
+            }),
+            Symbol::Epsilon => None,
+            Symbol::Eof => None,
+            Symbol::NonTerminal(_) => None,
+        }
+    }
+
     pub fn to_token_def_with_regex(&self, token_idx: TokenIdx) -> Option<(TokenDef, RegexHir)> {
         let token_idx = token_idx.0;
         match self {

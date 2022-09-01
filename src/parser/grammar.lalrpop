@@ -39,8 +39,8 @@ pub NamedSymbol: InputSymbol<'ast> = {
 
 pub Symbol: InputSymbol<'ast> = {
     r#""(\\\\|\\"|[^"\\])*""# => InputSymbol::StrLit(support.alloc_quoted_str(<>)),
+   "r" <regex: r#""(\\\\|\\"|[^"\\])*""#>  => InputSymbol::Regex(support.alloc_regex(regex)),
     <name: Ident> => InputSymbol::NonTerminal(name),
-   "r" <regex: r#""(\\\\|\\"|[^"\\])*""#>  => InputSymbol::Regex(support.alloc_regex(regex))
 }
 
 pub Ident: Ident<'ast> = {

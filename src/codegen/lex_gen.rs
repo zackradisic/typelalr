@@ -199,7 +199,7 @@ mod ts {
     }
 }
 
-pub fn generate(lex: Lex) -> String {
+pub fn generate(lex: &Lex) -> String {
     let chars = generate_chars();
     let ctx = ts::Ctx::new(&lex, chars);
 
@@ -401,7 +401,7 @@ mod test {
         // let tokens = lexer.lex("let x = 420");
         // println!("TOKENS: {:?}", tokens);
 
-        let str = generate(lexer);
+        let str = generate(&lexer);
         std::fs::write("./ts/lex_state.gen.ts", str).unwrap();
     }
 
@@ -412,7 +412,24 @@ mod test {
         // let tokens = lexer.lex("let x = 420");
         // println!("TOKENS: {:?}", tokens);
 
-        let str = generate(lexer);
+        let str = generate(&lexer);
+        std::fs::write("./ts/lex_state_basic.gen.ts", str).unwrap();
+    }
+
+    #[test]
+    fn math() {
+        let tokens = vec![
+            new_token_val("+", "\\+"),
+            new_token_val("*", "\\*"),
+            new_token_val("/", "/"),
+            new_token_val("-", "-"),
+            new_token_val("[1-9][0-9]*", "[1-9][0-9]*"),
+        ];
+        let lexer = Lex::from_tokens(tokens.clone());
+        let tokens = lexer.lex("420 + 4");
+        println!("TOKENS: {:?}", tokens);
+
+        let str = generate(&lexer);
         std::fs::write("./ts/lex_state_basic.gen.ts", str).unwrap();
     }
 }

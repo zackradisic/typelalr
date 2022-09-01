@@ -5,18 +5,21 @@ E? =   E
      | ε
 ```
 
-## code generation!
-generate pretty much everything in `parse_state.gen.ts`:
-* Symbol (production outputs)
-* Token (inputs for production functions)
-* Production (just a regular declaration)
-* Tokens 
-* Productions
-* Action
-* Goto
-* TokenKindToIdx
-* actions module
-  * variants of Symbol
-  * action impls (they are light-wrappers over user defined production fns)
-  * actions (they do the popping of the symbol stack and all that other BS)
-  * EmitProduction (just dispatching the actions)
+## detecting ambiguity stackoverflow problem i think
+This grammar causes stack overflow. I think it's because it causes an infinite loop bc of the Expr rule
+```ts
+export start Expr: ({ kind: "Expr", left: Expr, op: Op, right: Expr }) = [ 
+     <l: Expr> <op: Op> <right: Expr> => ({ kind: "Expr", left: l, right: right, op: op })
+]
+
+export Op: ({ kind: "Op", op: "add" | "sub" | "div" | "mul" }) = [ 
+     <plus: "+"> => ({ kind: "Op", op: "add" }),
+     <sub: "-"> => ({ kind: "Op", op: "sub" }),
+     <div: "/"> => ({ kind: "Op", op: "div" }),
+     <mul: "*"> => ({ kind: "Op", op: "mul" }),
+]
+
+export Num: ({ kind: "Num", value: string }) = [
+     <num: r"[1-9][0-9]*"> => ({ kind: "Num", value: num })
+]
+```
