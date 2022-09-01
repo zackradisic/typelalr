@@ -1,27 +1,22 @@
-import {
-  Action,
-  Goto,
-  Production,
-  Productions,
-  Symbol,
-  actions,
-  TokenKindToIdx,
-} from "./parse_state.gen";
+import { type_defs, actions } from "./parse_state.gen";
 import * as U from "./util";
 import * as L from "./lex";
 
-type GetAction<top extends any, a extends number> = top extends keyof Action
-  ? a extends keyof Action[top]
-    ? Action[top][a]
+type GetAction<
+  top extends any,
+  a extends number
+> = top extends keyof type_defs.Action
+  ? a extends keyof type_defs.Action[top]
+    ? type_defs.Action[top][a]
     : "error: `a` is not a key in `Action[top]`"
   : "error: `top` is not a key in `Action`";
 
 type GetGoto<
   stateIdx extends number,
   productionName extends string
-> = stateIdx extends keyof Goto
-  ? productionName extends keyof Goto[stateIdx]
-    ? Goto[stateIdx][productionName]
+> = stateIdx extends keyof type_defs.Goto
+  ? productionName extends keyof type_defs.Goto[stateIdx]
+    ? type_defs.Goto[stateIdx][productionName]
     : "error: `productionName` is not a key in `Goto[stateIdx]`"
   : `error: \`stateIdx\` is not a key in \`Goto\` (stateIdx=${stateIdx})`;
 
@@ -52,9 +47,12 @@ type TokenIndicesImpl<
   ret extends number[]
 > = toks extends [infer head, ...infer tail]
   ? head extends L.Token
-    ? head["kind"] extends keyof TokenKindToIdx
+    ? head["kind"] extends keyof type_defs.TokenKindToIdx
       ? tail extends L.Token[]
-        ? TokenIndicesImpl<tail, [TokenKindToIdx[head["kind"]], ...ret]>
+        ? TokenIndicesImpl<
+            tail,
+            [type_defs.TokenKindToIdx[head["kind"]], ...ret]
+          >
         : "unreachable: tail should always be L.Token[]"
       : `error: head['kind'] is not a valid token kind: ${head["kind"]}`
     : "error: `head` is not a lexer token"
@@ -66,7 +64,7 @@ type ParseImpl<
   stack extends number[],
   i extends number,
   a extends number,
-  symbolStack extends Symbol[]
+  symbolStack extends type_defs.Symbol[]
 > = stack extends [infer top, ...infer _restOfStack]
   ? GetAction<top, a> extends infer action
     ? action extends { shift: infer newStateIdx }
@@ -87,17 +85,17 @@ type ParseImpl<
           : "error: todo fill this out" /* NextToken<a, i, input>*/ // else it's an error so return it
         : "error: `newStateIdx` is not a number"
       : action extends { reduce: infer ruleIdx }
-      ? ruleIdx extends keyof Productions
-        ? Productions[ruleIdx] extends Production
+      ? ruleIdx extends keyof type_defs.Productions
+        ? type_defs.Productions[ruleIdx] extends type_defs.Production
           ? U.PopNStack<
               stack,
-              Productions[ruleIdx]["tokens"]["length"]
+              type_defs.Productions[ruleIdx]["tokens"]["length"]
             > extends infer newStack
             ? newStack extends [infer newTop, ...infer newRestOfStack]
               ? newTop extends number
                 ? GetGoto<
                     newTop,
-                    Productions[ruleIdx]["name"]
+                    type_defs.Productions[ruleIdx]["name"]
                   > extends infer goto_ta
                   ? goto_ta extends number
                     ? newRestOfStack extends number[]
@@ -105,7 +103,7 @@ type ParseImpl<
                           ruleIdx,
                           symbolStack
                         > extends infer newSymbolStack
-                        ? newSymbolStack extends Symbol[]
+                        ? newSymbolStack extends type_defs.Symbol[]
                           ? ParseImpl<
                               tokenInputs,
                               input,
@@ -116,7 +114,7 @@ type ParseImpl<
                             >
                           : newSymbolStack extends string // it's an error message
                           ? [{ err: newSymbolStack; stack: symbolStack }]
-                          : "unreachable: `newSymbolStack` should be either a Symbol[] or a string"
+                          : newSymbolStack // "unreachable: `newSymbolStack` should be either a Symbol[] or a string"
                         : "unreachable: inferring `newSymbolStack` never fails"
                       : "unreachable: `newRestOfStack` should always be a number[]"
                     : goto_ta // else it's an error message so return it
@@ -127,7 +125,7 @@ type ParseImpl<
           : "unreachable: `Productions[ruleIdx]` is not a production"
         : "error: `ruleIdx` is not a key in `Productions`"
       : action extends { accept: true }
-      ? [stack, symbolStack] // accept
+      ? symbolStack //[symbolStack, stack] // accept
       : `error: invalid token ${a}`
     : "unreachable: inferring `action` should never fail"
   : "error: stack is empty";
@@ -141,5 +139,10 @@ type Parse<tokenInputs extends L.Token[]> =
       : "error: `input` should always be a number[] or string"
     : "unreachable: inferring `input` never fails";
 
-type tokens = L.Lex<"('add' 42 50)">;
+type tokens = L.Lex<"('add' 34 35)">;
 type result = Parse<tokens>;
+
+type foo<t> = t extends type_defs.Symbol ? "NICE" : "NOT NICE";
+type bar = result[0];
+type add = actions.Action5Impl<"'add'">;
+type noob = foo<result[0]>;

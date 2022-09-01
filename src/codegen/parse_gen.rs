@@ -139,16 +139,22 @@ mod ts {
         pub fn generate(&self) -> Result<String, std::fmt::Error> {
             let mut ret = String::new();
 
+            self.generate_type_defs_module(&mut ret)?;
             self.generate_imports(&mut ret)?;
-            self.generate_symbols(&mut ret)?;
-            self.generate_tokens(&mut ret)?;
-            self.generate_productions(&mut ret)?;
-            self.generate_action_table(&mut ret)?;
-            self.generate_goto_table(&mut ret)?;
-            self.generate_tokenkind_to_idx(&mut ret)?;
             self.generate_actions_module(&mut ret)?;
 
             Ok(ret)
+        }
+
+        fn generate_type_defs_module<W: std::fmt::Write>(&self, w: &mut W) -> std::fmt::Result {
+            w.write_str("export declare module type_defs {\n")?;
+            self.generate_symbols(w)?;
+            self.generate_tokens(w)?;
+            self.generate_productions(w)?;
+            self.generate_action_table(w)?;
+            self.generate_goto_table(w)?;
+            self.generate_tokenkind_to_idx(w)?;
+            w.write_str("\n}\n")
         }
 
         fn generate_imports<W: std::fmt::Write>(&self, w: &mut W) -> std::fmt::Result {
@@ -307,7 +313,7 @@ export type Token =
             // EmitProduction type-level function
             write!(
                 buf,
-                "\ntype EmitProduction<prodIdx extends number, symbolStack extends Symbol[]> = "
+                "\ntype EmitProduction<prodIdx extends number, symbolStack extends type_defs.Symbol[]> = "
             )?;
             for action in &self.actions {
                 write!(
@@ -388,7 +394,7 @@ export type Token =
             // Function declaration
             write!(
                 w,
-                "type Action{}<symbolStack extends Symbol[]> = ",
+                "type Action{}<symbolStack extends type_defs.Symbol[]> = ",
                 self.production_idx.0
             )?;
 
@@ -435,11 +441,11 @@ export type Token =
                 |w| {
                     write_condition(
                         w,
-                        |w| w.write_str("newStack extends Symbol[]"),
+                        |w| w.write_str("newStack extends type_defs.Symbol[]"),
                         |w| self.validate_params(w, call_impl.clone()),
                         |w| {
                             w.write_str(
-                                r#"`unreachable: \`newStack\` should always be a Symbol[]`"#,
+                                r#"`unreachable: \`newStack\` should always be a type_defs.Symbol[]`"#,
                             )
                         },
                     )
@@ -630,7 +636,8 @@ mod test {
 
         let (lex_str, str) = generate(&bump, &ast, &lalr).unwrap();
         // println!("{}", str);
-        std::fs::write("./noob.ts", str).unwrap();
+        std::fs::write("./ts/parse_state.gen.ts", str).unwrap();
+        std::fs::write("./ts/lex_state.gen.ts", lex_str).unwrap();
     }
 
     #[test]
@@ -675,8 +682,8 @@ mod test {
         ]
 
         export Expr: ({ kind: "int", value: string } | { kind: "symbol", value: string }) = [ 
-            <int: Int> => ({ kind: "int", int }),
-            <str: Symbol> => ({ kind: "str", str }),
+            <int: Int> => ({ kind: "int", int: int }),
+            <str: Symbol> => ({ kind: "str", str: str }),
         ]
 
         export Int: (string) = [

@@ -52,8 +52,6 @@ mod ts {
 
     impl<'a> Ctx<'a> {
         pub fn new(lex: &'a Lex, chars: BTreeMap<char, u32>) -> Self {
-            println!("{:#?}", lex);
-
             let tokens: BTreeMap<usize, (&'a str, bool)> =
                 BTreeMap::from_iter(lex.tokens.iter().flat_map(|(k, v)| {
                     lex.dfa.states.iter().enumerate().filter_map(|(idx, _)| {
