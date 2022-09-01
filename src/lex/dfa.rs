@@ -66,7 +66,7 @@ impl DFA {
                 .filter(|idx| self.accepting_states.contains(idx))
             {
                 match ret.entry(*dfa_state) {
-                    std::collections::btree_map::Entry::Vacant(mut entry) => {
+                    std::collections::btree_map::Entry::Vacant(entry) => {
                         entry.insert(vec![*nfa_state_idx]);
                     }
                     std::collections::btree_map::Entry::Occupied(mut entry) => {
@@ -221,7 +221,7 @@ impl DFABuilder {
         let accepting_states = nfa.accepting_states();
         let mut final_states = Vec::with_capacity(d_states.capacity());
 
-        for (i, states) in d_states.into_iter().enumerate() {
+        for (i, _states) in d_states.into_iter().enumerate() {
             final_states.push(State {
                 first_edge: first_edges[i],
             })
@@ -287,7 +287,7 @@ pub fn remove_overlap(ranges: &BTreeSet<Match>) -> Vec<Match> {
     let mut disjoint_ranges = vec![];
 
     for range in ranges {
-        add_range(&range, 0, &mut disjoint_ranges);
+        add_range(range, 0, &mut disjoint_ranges);
     }
 
     // the algorithm above leaves some empty ranges in for simplicity;
@@ -305,7 +305,7 @@ fn add_range(range: &Match, start_index: usize, disjoint_ranges: &mut Vec<Match>
     // Find first overlapping range in `disjoint_ranges`, if any.
     match disjoint_ranges[start_index..]
         .iter()
-        .position(|r| r.clone().intersects(&range))
+        .position(|r| r.clone().intersects(range))
     {
         Some(index) => {
             let index = index + start_index;

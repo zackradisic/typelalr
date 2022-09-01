@@ -92,8 +92,7 @@ mod ts {
             let starting_production_idx = 1;
             let action_impls: Vec<_> = ast_productions
                 .iter()
-                .map(|ast_prod| ast_prod.bodies.iter().map(|body| (ast_prod.name, body)))
-                .flatten()
+                .flat_map(|ast_prod| ast_prod.bodies.iter().map(|body| (ast_prod.name, body)))
                 .enumerate()
                 .map(|(i, (name, body))| {
                     bump.alloc(ActionImpl {
@@ -103,8 +102,7 @@ mod ts {
                         inputs: body
                             .input_tokens
                             .iter()
-                            .map(|symbol| ActionImplParam::from_input_symbols(bump, symbol))
-                            .filter_map(|x| x)
+                            .filter_map(|symbol| ActionImplParam::from_input_symbols(bump, symbol))
                             .collect(),
                     }) as &'ast _
                 })
@@ -233,7 +231,7 @@ export type Token =
                 for token in &production.input_tokens {
                     let idx = self
                         .grammar
-                        .get_token_idx(&token)
+                        .get_token_idx(token)
                         .expect("Should have token idx");
                     write!(w, "{},", idx.0)?;
                 }
@@ -291,7 +289,7 @@ export type Token =
                     Symbol::Epsilon => continue,
                     Symbol::Eof => "EOF",
                 };
-                write!(w, "'{}': {}\n", name, idx)?;
+                writeln!(w, "'{}': {}", name, idx)?;
             }
             w.write_str("\n}\n")?;
             Ok(())
@@ -463,7 +461,7 @@ export type Token =
         fn validate_params<W: std::fmt::Write>(
             &self,
             w: &mut W,
-            mut call_impl: String,
+            call_impl: String,
         ) -> std::fmt::Result {
             let mut cond_stack = vec![];
             let mut else_stack = vec![];
@@ -567,7 +565,7 @@ export type Token =
                     write!(w, "\"{}\"", lit)?;
                     Ok(true)
                 }
-                ActionImplParam::Regex(r) if !is_top => {
+                ActionImplParam::Regex(_r) if !is_top => {
                     write!(w, "string")?;
                     Ok(true)
                 }

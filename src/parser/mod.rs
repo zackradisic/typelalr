@@ -21,7 +21,6 @@ use self::ast::Ident;
 #[derive(Debug)]
 pub struct Grammar<'ast> {
     production_name_map: BTreeMap<Ident<'ast>, Vec<ProductionIdx>>,
-    ast_production_body_to_production_idx: BTreeMap<usize, usize>,
     productions: Vec<Production<'ast>>,
     tokens: Vec<Symbol<'ast>>,
     augmented_start_name: Ident<'ast>,
@@ -59,7 +58,6 @@ impl<'ast> Grammar<'ast> {
         bump: &'ast Bump,
         ast_productions: &'ast [ast::Production<'ast>],
     ) -> Self {
-        let mut ast_production_body_to_production_idx = BTreeMap::new();
         let mut production_name_map: BTreeMap<Ident, Vec<ProductionIdx>> = BTreeMap::new();
         let mut productions = Vec::new();
 
@@ -96,7 +94,7 @@ impl<'ast> Grammar<'ast> {
         let mut token_set: BTreeSet<Symbol> = BTreeSet::new();
         for prod in productions.iter() {
             for input_token in prod.input_tokens.iter() {
-                token_set.insert(input_token.clone());
+                token_set.insert(*input_token);
             }
         }
         let mut tokens = Vec::with_capacity(1 + token_set.len());
@@ -108,7 +106,6 @@ impl<'ast> Grammar<'ast> {
             productions,
             tokens,
             augmented_start_name,
-            ast_production_body_to_production_idx,
         }
     }
 

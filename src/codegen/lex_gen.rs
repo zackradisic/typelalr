@@ -13,13 +13,13 @@ use crate::lex::lex::Lex;
 
 fn nice_case(s: &str) -> String {
     if s.is_empty() {
-        return s.to_string();
+        s.to_string()
     } else {
         s.chars()
             .next()
             .unwrap()
             .to_uppercase()
-            .chain(s.chars().skip(1).map(char::to_lowercase).flatten())
+            .chain(s.chars().skip(1).flat_map(char::to_lowercase))
             .collect()
     }
 }
@@ -199,7 +199,7 @@ mod ts {
 
 pub fn generate(lex: &Lex) -> String {
     let chars = generate_chars();
-    let ctx = ts::Ctx::new(&lex, chars);
+    let ctx = ts::Ctx::new(lex, chars);
 
     ctx.to_string()
 }
@@ -217,18 +217,14 @@ fn generate_chars() -> BTreeMap<char, u32> {
 
     fn range_to_char_vec(r: Range<u32>) -> Vec<char> {
         let mut chars = Vec::with_capacity(r.len());
-        for i in r.into_iter() {
+        for i in r {
             // just gonna support a limited amount of chars for now
             chars.push(i as u8 as char);
         }
         chars
     }
 
-    let mut range_chars: Vec<char> = ranges
-        .into_iter()
-        .map(range_to_char_vec)
-        .flatten()
-        .collect();
+    let mut range_chars: Vec<char> = ranges.into_iter().flat_map(range_to_char_vec).collect();
     range_chars.push(' ');
 
     let invisible_codepoints = [
@@ -395,7 +391,7 @@ mod test {
             new_token_val("NUM", "[1-9][0-9]*"),
             new_token("SEMI-COLON", ";"),
         ];
-        let lexer = Lex::from_tokens(tokens.clone());
+        let lexer = Lex::from_tokens(tokens);
         // let tokens = lexer.lex("let x = 420");
         // println!("TOKENS: {:?}", tokens);
 
@@ -406,7 +402,7 @@ mod test {
     #[test]
     fn basic_gen() {
         let tokens = vec![new_token_val("c", "c"), new_token_val("d", "d")];
-        let lexer = Lex::from_tokens(tokens.clone());
+        let lexer = Lex::from_tokens(tokens);
         // let tokens = lexer.lex("let x = 420");
         // println!("TOKENS: {:?}", tokens);
 
@@ -423,7 +419,7 @@ mod test {
             new_token_val("-", "-"),
             new_token_val("[1-9][0-9]*", "[1-9][0-9]*"),
         ];
-        let lexer = Lex::from_tokens(tokens.clone());
+        let lexer = Lex::from_tokens(tokens);
         let tokens = lexer.lex("420 + 4");
         println!("TOKENS: {:?}", tokens);
 

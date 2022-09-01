@@ -76,7 +76,7 @@ impl<'ast> InputSymbol<'ast> {
                 },
                 RegexParser::new().parse(regex).unwrap(),
             )),
-            InputSymbol::Named(NamedSymbol { name, ty }) => {
+            InputSymbol::Named(NamedSymbol { name: _, ty }) => {
                 ty.to_token_def_with_regex(TokenIdx(token_idx))
             }
             InputSymbol::Epsilon => None,
@@ -122,7 +122,7 @@ impl<'ast> InputSymbol<'ast> {
             (Self::Epsilon, _) => Less,
             (Self::StrLit(a), Self::StrLit(b)) => a.cmp(b),
             (Self::Regex(a), Self::Regex(b)) => a.cmp(b),
-            (Self::Named(a), Self::Named(b)) => match a.ty.cmp(&b.ty) {
+            (Self::Named(a), Self::Named(b)) => match a.ty.cmp(b.ty) {
                 Equal => match (a.name.as_ref(), b.name.as_ref()) {
                     (Some(a), Some(b)) => a.cmp(b),
                     (Some(_), None) => Greater,
@@ -175,7 +175,6 @@ impl<'ast> AsRef<str> for Ident<'ast> {
 
 #[cfg(test)]
 mod test {
-    use crate::parser::ast::Ident;
 
     #[test]
     fn test() {

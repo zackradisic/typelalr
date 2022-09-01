@@ -84,7 +84,7 @@ impl<'ast> Lalr<'ast> {
         println!("GOTO: {:#?}", self.goto);
 
         loop {
-            let s = stack.last().expect("Stack is empty").clone();
+            let s = *stack.last().expect("Stack is empty");
             // println!("STACK: {:?}", stack);
             // println!("S={:?} TOKEN {:?}: {:?}", s, a_idx, a);
 
@@ -184,7 +184,7 @@ mod test {
 
         let lalr = Lalr::new(grammar);
 
-        let noob = lalr.parse("cdd");
+        let _noob = lalr.parse("cdd");
     }
 
     #[test]
@@ -222,7 +222,7 @@ mod test {
 
         let lalr = Lalr::new(grammar);
 
-        let noob = lalr.parse("42 420");
+        let _noob = lalr.parse("42 420");
     }
 
     #[test]
@@ -257,7 +257,7 @@ mod test {
 
         let lalr = Lalr::new(grammar);
 
-        let noob = lalr.parse("42 420 69 9001");
+        let _noob = lalr.parse("42 420 69 9001");
     }
 
     #[test]
@@ -296,6 +296,6 @@ mod test {
 
         let lalr = Lalr::new(grammar);
 
-        let noob = lalr.parse("(add 35 34)");
+        let _noob = lalr.parse("(add 35 34)");
     }
 }

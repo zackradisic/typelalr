@@ -8,7 +8,7 @@ pub mod option_usize;
 pub mod parser;
 
 pub fn parse_grammar<'ast>(bump: &'ast Bump, grammar_str: &str) -> Vec<ast::Production<'ast>> {
-    let mut support = parser::ParserSupport::new(&bump);
+    let mut support = parser::ParserSupport::new(bump);
     let parser = parser::grammar::ProgramParser::new();
 
     let ast_productions = parser.parse(&mut support, grammar_str).unwrap();

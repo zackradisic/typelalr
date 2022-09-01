@@ -308,7 +308,7 @@ mod test {
     #[test]
     fn sanity() {
         let tokens = vec![new_token_val("c", "c"), new_token_val("d", "d")];
-        let lexer = Lex::from_tokens(tokens.clone());
+        let lexer = Lex::from_tokens(tokens);
         let toks = lexer.lex("cdd");
         println!("TOKS: {:#?}", toks);
     }
@@ -317,7 +317,7 @@ mod test {
     fn string() {
         let tokens = vec![new_token_val("string", "\".*\"")];
 
-        let lexer = Lex::from_tokens(tokens.clone());
+        let lexer = Lex::from_tokens(tokens);
         println!("LEX: {:#?}", lexer);
         let toks = lexer.lex("\"hello\" noob");
 
@@ -346,7 +346,7 @@ mod test {
     #[test]
     fn precedence_longest2() {
         let tokens = vec![new_token("bb", "bb"), new_token("bbb", "bbb")];
-        let lexer = Lex::from_tokens(tokens.clone());
+        let lexer = Lex::from_tokens(tokens);
         let toks = lexer.lex("bbbbb");
 
         assert_eq!(toks[0], tok("bbb"));
@@ -356,7 +356,7 @@ mod test {
     #[test]
     fn precedence_longest() {
         let tokens = vec![new_token("abbb", "abbb"), new_token("a*b+", "a*b+")];
-        let lexer = Lex::from_tokens(tokens.clone());
+        let lexer = Lex::from_tokens(tokens);
         let toks = lexer.lex("abbbbbbb");
 
         assert_eq!(toks[0], tok("a*b+"));
@@ -393,7 +393,7 @@ mod test {
             new_token_val("op", "\\+|-"),
         ];
 
-        let lexer = Lex::from_tokens(tokens.clone());
+        let lexer = Lex::from_tokens(tokens);
         let toks = lexer.lex("420 + 69");
 
         let [_420, plus, _69]: &[Token; 3] = toks.as_slice().try_into().unwrap();
@@ -407,7 +407,7 @@ mod test {
     fn capture2() {
         let tokens = vec![new_token_val("number", "[0-9]*"), new_token("+", "\\+")];
 
-        let lexer = Lex::from_tokens(tokens.clone());
+        let lexer = Lex::from_tokens(tokens);
         let toks = lexer.lex("420 + 69");
 
         let [_420, plus, _69]: &[Token; 3] = toks.as_slice().try_into().unwrap();
@@ -428,7 +428,7 @@ mod test {
             new_token(";", ";"),
         ];
 
-        let lexer = Lex::from_tokens(tokens.clone());
+        let lexer = Lex::from_tokens(tokens);
         let toks = lexer.lex("let foo = 420;");
 
         let [_let, foo, eq, _420, semi]: &[Token; 5] = toks.as_slice().try_into().unwrap();
@@ -451,7 +451,7 @@ mod test {
             new_token_val("float", "[+-]?([0-9]*[.])?[0-9]+"),
         ];
 
-        let lexer = Lex::from_tokens(tokens.clone());
+        let lexer = Lex::from_tokens(tokens);
         let toks = lexer.lex("(print \"Stuff\" \"HI\" (+ 400 20) (- 70.0 1.0))");
 
         let [

@@ -1,19 +1,13 @@
 use std::{
     collections::{btree_map::Entry, BTreeMap},
     mem::ManuallyDrop,
-    ops::{Deref, Index},
+    ops::Deref,
 };
 
 use bit_vec::BitVec;
 use indexmap::{IndexMap, IndexSet};
 
-use crate::{
-    lalr::item::ItemSetDebug,
-    parser::{
-        ast::{Ident, InputSymbol},
-        Grammar, Symbol,
-    },
-};
+use crate::parser::{ast::Ident, Grammar, Symbol};
 
 use super::item::{ItemSet, ProductionIdx, TokenIdx};
 
@@ -110,7 +104,7 @@ pub fn make_lalr_tables<'ast>(
         grammar: &Grammar<'ast>,
         lr_sets: &IndexSet<ItemSet>,
         lr_to_lalr: &BTreeMap<usize, usize>,
-        i: usize,
+        _i: usize,
         lalr_sets: &IndexSet<ItemSet>,
     ) -> Option<usize> {
         let goto_ia = item_set.goto(a, grammar);
@@ -296,7 +290,6 @@ mod test {
     use std::collections::BTreeMap;
 
     use bumpalo::Bump;
-    use indexmap::IndexMap;
 
     use crate::{
         lalr::item::{ItemSet, ItemSetDebug, TokenDebug},
@@ -364,7 +357,7 @@ mod test {
         }
         println!("\n--------\n");
 
-        let (action, goto) = make_lalr_tables(&grammar, &lalr_set, &lr_items, &lr_to_lalr);
+        let (action, _goto) = make_lalr_tables(&grammar, &lalr_set, &lr_items, &lr_to_lalr);
 
         for (i, item_set) in action.iter() {
             let item_set = item_set.iter().fold(BTreeMap::new(), |mut acc, (k, v)| {

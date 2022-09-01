@@ -81,14 +81,11 @@ impl Item {
     fn dot_production_name<'ast>(self, grammar: &'ast Grammar<'ast>) -> Option<Ident<'ast>> {
         let this_production: &Production = grammar.get_production(self.production_idx()).unwrap();
 
-        match this_production
+        this_production
             .input_tokens
             .get(self.dot() as usize)
             .and_then(|symbol| symbol.as_non_terminal())
-        {
-            Some(non_terminal) => Some(*non_terminal),
-            _ => None,
-        }
+            .copied()
     }
 
     /// Iterate over the symbols in this item (after the dot)
@@ -162,7 +159,7 @@ impl ItemSet {
         debug_assert_eq!(self.0.keys().len(), other.0.keys().len());
 
         for (item, lookaheads) in self.0.iter_mut() {
-            lookaheads.extend(other.0.get(&item).unwrap());
+            lookaheads.extend(other.0.get(item).unwrap());
         }
     }
 

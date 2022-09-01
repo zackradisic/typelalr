@@ -275,7 +275,7 @@ impl NFA {
                 .collect()
         };
 
-        Self::has_accepting_states(state_set.iter().map(|s| *s).collect(), accepting_states)
+        Self::has_accepting_states(state_set.iter().copied().collect(), accepting_states)
     }
 
     fn move_state(&self, state_set: HashSet<StateIdx>, c: char) -> HashSet<StateIdx> {
@@ -673,7 +673,7 @@ mod test {
         fn range_to_string(range: Range<u32>) -> String {
             let mut ret = String::with_capacity(range.len());
 
-            for char_code in range.into_iter() {
+            for char_code in range {
                 ret.push(char_code as u8 as char);
             }
 
@@ -683,7 +683,7 @@ mod test {
         let range_chars: Vec<String> = ranges.into_iter().map(range_to_string).collect();
         println!(
             "FUCK: {:#?}",
-            BTreeSet::from_iter(range_chars.iter().map(|s| s.chars()).flatten())
+            BTreeSet::from_iter(range_chars.iter().flat_map(|s| s.chars()))
         );
         let mut final_str = "type Characters = [".to_owned();
 
@@ -733,7 +733,7 @@ mod test {
         let invisible_codepoints: BTreeSet<usize> = BTreeSet::from(unicode);
 
         let mut char_set: BTreeSet<char> = BTreeSet::new();
-        for r in range_chars.clone() {
+        for r in range_chars {
             for char in r.chars() {
                 if invisible_codepoints.contains(&(char as usize)) {
                     continue;
@@ -755,7 +755,7 @@ mod test {
             final_str += "\",";
         }
 
-        final_str.push_str("]");
+        final_str.push(']');
 
         std::fs::write("./chars.ts", final_str).unwrap();
         println!("HIR: {:?}", hir);
