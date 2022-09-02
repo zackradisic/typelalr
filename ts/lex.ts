@@ -216,13 +216,3 @@ export type Lex<fullInput extends string> = LexImpl<
     ? U.Reverse<[{ kind: "EOF" }, ...tokens]>
     : "unreachable: tokens should be an array"
   : "unreachable: inferring `tokens` and `lastAcceptingState` should always work";
-
-// type toks = Lex<`
-//     let foo = 420;
-// `>;
-
-type toks = Lex<`
-  ccdd
-`>;
-type toks2 = Lex<`ccdd`>;
-type tokens = Lex<"420 + 32">;

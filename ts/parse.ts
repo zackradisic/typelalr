@@ -64,8 +64,11 @@ type ParseImpl<
   stack extends number[],
   i extends number,
   a extends number,
-  symbolStack extends type_defs.Symbol[]
-> = stack extends [infer top, ...infer _restOfStack]
+  symbolStack extends type_defs.Symbol[],
+  maxRecursionDepth extends number
+> = maxRecursionDepth extends 0
+  ? "exceeded max recursion depth"
+  : stack extends [infer top, ...infer _restOfStack]
   ? GetAction<top, a> extends infer action
     ? action extends { shift: infer newStateIdx }
       ? newStateIdx extends number
@@ -78,7 +81,11 @@ type ParseImpl<
                   [newStateIdx, ...stack],
                   newI,
                   newA,
-                  [{ kind: "token"; token: tokenInputs[i] }, ...symbolStack]
+                  [
+                    { kind: "token"; token: tokenInputs[i]; lmao: newStateIdx },
+                    ...symbolStack
+                  ],
+                  U.Pred<maxRecursionDepth>
                 >
               : `unreachable: \`newA\` should be a number here (${newI})`
             : "unreachable: `newI` should be a number here"
@@ -86,36 +93,31 @@ type ParseImpl<
         : "error: `newStateIdx` is not a number"
       : action extends { reduce: infer ruleIdx }
       ? ruleIdx extends keyof type_defs.Productions
-        ? type_defs.Productions[ruleIdx] extends type_defs.Production
+        ? type_defs.Productions[ruleIdx] extends infer production extends type_defs.Production
           ? U.PopNStack<
               stack,
-              type_defs.Productions[ruleIdx]["tokens"]["length"]
+              production["tokens"]["length"]
             > extends infer newStack
             ? newStack extends [infer newTop, ...infer newRestOfStack]
               ? newTop extends number
-                ? GetGoto<
-                    newTop,
-                    type_defs.Productions[ruleIdx]["name"]
-                  > extends infer goto_ta
+                ? GetGoto<newTop, production["name"]> extends infer goto_ta
                   ? goto_ta extends number
                     ? newRestOfStack extends number[]
                       ? actions.EmitProduction<
                           ruleIdx,
                           symbolStack
-                        > extends infer newSymbolStack
-                        ? newSymbolStack extends type_defs.Symbol[]
-                          ? ParseImpl<
-                              tokenInputs,
-                              input,
-                              [goto_ta, newTop, ...newRestOfStack],
-                              i,
-                              a,
-                              newSymbolStack
-                            >
-                          : newSymbolStack extends string // it's an error message
-                          ? [{ err: newSymbolStack; stack: symbolStack }]
-                          : newSymbolStack // "unreachable: `newSymbolStack` should be either a Symbol[] or a string"
-                        : "unreachable: inferring `newSymbolStack` never fails"
+                        > extends infer newSymbolStack extends type_defs.Symbol[]
+                        ? ParseImpl<
+                            tokenInputs,
+                            input,
+                            [goto_ta, newTop, ...newRestOfStack],
+                            i,
+                            a,
+                            // symbolStack,
+                            newSymbolStack,
+                            U.Pred<maxRecursionDepth>
+                          >
+                        : ['error', stack] //actions.EmitProduction<ruleIdx, symbolStack> //symbolStack // 'error' // [stack, newSymbolStack]
                       : "unreachable: `newRestOfStack` should always be a number[]"
                     : goto_ta // else it's an error message so return it
                   : "unreachable: inferring goto_ta never fails"
@@ -126,23 +128,39 @@ type ParseImpl<
         : "error: `ruleIdx` is not a key in `Productions`"
       : action extends { accept: true }
       ? symbolStack //[symbolStack, stack] // accept
-      : `error: invalid token ${a}`
+      : [`error: invalid token ${a}`, symbolStack]
     : "unreachable: inferring `action` should never fail"
   : "error: stack is empty";
 
 type Parse<tokenInputs extends L.Token[]> =
   TokenIndices<tokenInputs> extends infer input
     ? input extends number[]
-      ? ParseImpl<tokenInputs, input, [0], 0, input[0], []>
+      ? ParseImpl<tokenInputs, input, [0], 0, input[0], [], 50>
       : input extends string
       ? input
       : "error: `input` should always be a number[] or string"
     : "unreachable: inferring `input` never fails";
 
-type tokens = L.Lex<"('add' 34 35)">;
-type result = Parse<tokens>;
+type tokens = L.Lex<"(add (add add))">;
+// type wtf = Parse<tokens>
 
-type foo<t> = t extends type_defs.Symbol ? "NICE" : "NOT NICE";
-type bar = result[0];
-type add = actions.Action5Impl<"'add'">;
-type noob = foo<result[0]>;
+type tokenIndices = TokenIndices<tokens>
+// type help = ParseImpl<tokens, TokenIndices<tokens>, [0], 0, tokenIndices[0], [], 50>
+type help = ParseImpl<tokens, TokenIndices<tokens>, [11, 6, 2, 0], 7, 0, [
+  {
+    kind: "token",
+    token: { kind: ")", value: ")"},
+  },
+  { kind: "Expr", value: { kind: "int", value: "420" }},
+  // { 
+  //   kind: "Exprs", 
+  //   value: [
+  //     { kind: "sexpr", sexpr: { kind: "SExpr", exprs: [ { kind: "symbol", value: "add" }, { kind: "symbol", value: "add" } ] }},
+  //     { kind: "symbol", value: "add" }
+  //   ]
+  // },
+  {
+    kind: "token",
+    token: { kind: "(", value: "("},
+  },
+], 50>

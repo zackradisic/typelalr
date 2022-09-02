@@ -1,3 +1,6 @@
+use std::{collections::HashMap, fs};
+
+use bumpalo::Bump;
 use indexmap::IndexSet;
 
 use crate::{
@@ -83,16 +86,18 @@ impl<'ast> Lalr<'ast> {
         println!("ACTION: {:#?}", self.action);
         println!("GOTO: {:#?}", self.goto);
 
+        let mut loop_count = 0;
         loop {
+            loop_count += 1;
             let s = *stack.last().expect("Stack is empty");
-            // println!("STACK: {:?}", stack);
-            // println!("S={:?} TOKEN {:?}: {:?}", s, a_idx, a);
+            println!("STACK: {:?}", stack);
+            println!("S={:?} TOKEN {:?}: {:?} i={}", s, a_idx, a, i);
 
             match self.action.try_index((s, a_idx)) {
                 Some(Action::Shift(new_state_idx)) => {
                     stack.push(*new_state_idx);
 
-                    // println!("  shifting {}", *new_state_idx);
+                    println!("  shifting {}", *new_state_idx);
 
                     token_stack.push(a);
                     next_token(&mut a, &mut a_idx, &mut i, tokens);
@@ -136,7 +141,7 @@ impl<'ast> Lalr<'ast> {
                     // );
                 }
                 Some(Action::Accept) => {
-                    // println!("Accepting!");
+                    println!("Accepting!");
                     break;
                 }
                 None => panic!(
@@ -149,6 +154,7 @@ impl<'ast> Lalr<'ast> {
             }
         }
 
+        println!("LOOP COUNT: {}", loop_count);
         ret
     }
 }

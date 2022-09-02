@@ -323,15 +323,15 @@ export type Token =
             writeln!(buf, "`error: invalid production idx: ${{prodIdx}}`;")?;
 
             // Action impls
-            for action_impl in &self.action_impls {
-                write!(buf, "type Action{}Impl<", action_impl.production_idx.0)?;
-                for input_symbol in &action_impl.inputs {
-                    if input_symbol.write(buf)? {
-                        buf.push_str(", ");
-                    }
-                }
-                writeln!(buf, "> = {}", action_impl.code)?;
-            }
+            // for action_impl in &self.action_impls {
+            //     write!(buf, "type Action{}Impl<", action_impl.production_idx.0)?;
+            //     for input_symbol in &action_impl.inputs {
+            //         if input_symbol.write(buf)? {
+            //             buf.push_str(", ");
+            //         }
+            //     }
+            //     writeln!(buf, "> = {}", action_impl.code)?;
+            // }
 
             buf.push('\n');
             // Actions
@@ -380,8 +380,8 @@ export type Token =
 
             write!(
                 buf,
-                "{{ kind: '{}', value: Action{}Impl<{}> }},",
-                self.production_name, self.production_idx.0, args
+                "{{ kind: '{}', value: {} }},",
+                self.production_name, self.action_impl.code
             )?;
             buf.push_str("...newStack]");
 
@@ -402,7 +402,7 @@ export type Token =
                     write!(w, "U.PopNStackWithValue<symbolStack, {}> extends [infer newStack, infer poppedValues]", self.pop_amount)
                 },
                 |w| {
-                    self.popped_values(w, self.call_impl()?)?;
+                    self.popped_values(w, self.call_impl()?, self.action_impl.production_idx)?;
 
                     Ok(())
                 },
@@ -416,6 +416,7 @@ export type Token =
             &self,
             w: &mut W,
             call_impl: String,
+            action_idx: ProductionIdx,
         ) -> std::fmt::Result {
             write_condition(
                 w,
@@ -425,7 +426,7 @@ export type Token =
                     for sym in &self.action_impl.inputs {
                         match sym {
                             ActionImplParam::Named(NamedActionImplParam { name, .. }) => {
-                                write!(w, "infer {},", name.as_ref())?
+                                write!(w, "infer __{},", name.as_ref())?
                             }
                             _ => {
                                 write!(w, "infer var{},", i)?;
@@ -442,8 +443,10 @@ export type Token =
                         |w| w.write_str("newStack extends type_defs.Symbol[]"),
                         |w| self.validate_params(w, call_impl.clone()),
                         |w| {
-                            w.write_str(
-                                r#"`unreachable: \`newStack\` should always be a type_defs.Symbol[]`"#,
+                            write!(
+                                w,
+                                r#"`unreachable: \`newStack\` should always be a type_defs.Symbol[] (Action{})`"#,
+                                action_idx.0
                             )
                         },
                     )
@@ -468,6 +471,7 @@ export type Token =
 
             let mut i = 0;
             for sym in &self.action_impl.inputs {
+                i += 1;
                 let named_sym = match sym {
                     ActionImplParam::Named(named) => named,
                     _ => continue,
@@ -476,61 +480,60 @@ export type Token =
                 match named_sym.param {
                     ActionImplParam::NonTerminal(non_terminal) => {
                         cond_stack.push(format!(
-                            "{} extends {{ kind : \"{}\", value: {} }}",
-                            named_sym.name, non_terminal, non_terminal
+                            "__{} extends {{ kind : \"{}\", value: infer {} extends {} }}",
+                            named_sym.name, non_terminal, named_sym.name, non_terminal
                         ));
 
                         else_stack.push(format!(
-                            r#"`error: invalid symbol (pos \`${{{}}}\`, Action{})`"#,
+                            r#""error: invalid symbol (pos `{}`, Action{})""#,
                             i, self.production_idx.0
                         ));
                     }
                     ActionImplParam::StrLit(str_lit) => {
                         cond_stack.push(format!(
-                            r#"{} extends {{ kind: "token", token: L.Token }}"#,
+                            r#"__{} extends {{ kind: "token", token: L.Token }}"#,
                             named_sym.name
                         ));
                         cond_stack.push(format!(
-                            "{}['token']['value'] extends '{}'",
-                            named_sym.name, str_lit
+                            "__{}['token']['value'] extends infer {} extends '{}'",
+                            named_sym.name, named_sym.name, str_lit,
                         ));
                         else_stack.push(format!(
-                            r#"`error: not a token (pos \`${{{}}}\`, Action{})`"#,
+                            r#"`error: not a token (pos \`{}\`, Action{})`"#,
                             i, self.production_idx.0
                         ));
                         else_stack.push(format!(
-                            r#"`error: invalid symbol (pos \`${{{}}}\`, Action{})`"#,
+                            r#"`error: invalid symbol (pos \`{}\`, Action{})`"#,
                             i, self.production_idx.0
                         ));
                     }
                     ActionImplParam::Regex(_) => {
                         cond_stack.push(format!(
-                            r#"{} extends {{ kind: "token", token: L.Token }}"#,
+                            r#"__{} extends {{ kind: "token", token: L.Token }}"#,
                             named_sym.name
                         ));
                         cond_stack.push(format!(
-                            "{}['token']['value'] extends string",
-                            named_sym.name
+                            "__{}['token']['value'] extends infer {} extendsstring",
+                            named_sym.name, named_sym.name
                         ));
                         else_stack.push(format!(
-                            r#"`error: not a token (pos \`${{{}}}\`, Action{})`"#,
+                            r#"`error: not a token (pos \`{}\`, Action{})`"#,
                             i, self.production_idx.0
                         ));
                         else_stack.push(format!(
-                            r#"`error: invalid symbol (pos \`${{{}}}\`, Action{})`"#,
+                            r#"`error: invalid symbol (pos \`{}\`, Action{})`"#,
                             i, self.production_idx.0
                         ));
                     }
                     ActionImplParam::Named(_) => unreachable!(),
                 };
-
-                i += 1;
             }
 
             for cond in cond_stack.into_iter() {
                 w.write_str(&cond)?;
                 w.write_str(" ? ")?;
             }
+            // w.write_str(self.action_impl.code)?;
             w.write_str(&call_impl)?;
             for otherwise in else_stack.into_iter() {
                 w.write_str(" : ")?;
@@ -671,7 +674,7 @@ mod test {
     fn lisp() {
         let grammar_str = r#"
         export start SExpr: ({ kind: "SExpr", exprs: Exprs }) = [
-            "(" <exprs: Exprs> ")" => ({ kind: "SExpr", exprs })
+            "(" <exprs: Exprs> ")" => ({ kind: "SExpr", exprs: exprs })
         ]
 
         export Exprs: (Expr[]) = [
@@ -679,17 +682,18 @@ mod test {
             <eee: Expr> => ([eee])
         ]
 
-        export Expr: ({ kind: "int", value: string } | { kind: "symbol", value: string }) = [ 
-            <int: Int> => ({ kind: "int", int: int }),
-            <str: Symbol> => ({ kind: "str", str: str }),
+        export Expr: ({ kind: "int", value: "420" } | { kind: "symbol", value: "add" } | { kind: "sexpr", sexpr: SExpr }) = [ 
+            <sexpr: SExpr> => ({ kind: "sexpr", sexpr: sexpr }),
+            <int: Int> => ({ kind: "int", value: int }),
+            <str: Symbol> => ({ kind: "symbol", value: str }),
         ]
 
-        export Int: (string) = [
-            <int: r"[1-9][0-9]*"> => (int)
+        export Int: ("420") = [
+            <int: "420"> => (int)
         ]
 
-        export Symbol: (string) = [
-            <sym: r"[^() ]*"> => (sym)
+        export Symbol: ("add") = [
+            <sym: "add"> => (sym)
         ]
     "#;
         let bump = Bump::new();
@@ -697,9 +701,10 @@ mod test {
         let grammar = Grammar::grammar_from_ast_productions(&bump, &ast);
 
         let lalr = Lalr::new(grammar);
+        lalr.parse("(add (add add))");
 
         let (lex, str) = generate(&bump, &ast, &lalr).unwrap();
-        std::fs::write("./ts/parse_state.gen.ts", str).unwrap();
-        std::fs::write("./ts/lex_state.gen.ts", lex).unwrap();
+        // std::fs::write("./ts/parse_state.gen.ts", str).unwrap();
+        // std::fs::write("./ts/lex_state.gen.ts", lex).unwrap();
     }
 }
