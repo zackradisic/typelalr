@@ -1,0 +1,14 @@
+export start SExpr: ({ kind: "SExpr", exprs: Exprs }) = [
+    "(" <exprs: Exprs> ")" => ({ kind: "SExpr", exprs: exprs })
+]
+
+export Exprs: (Expr[]) = [
+    <eee: Expr> <es: Exprs> => ([eee, ...es]),
+    <eee: Expr> => ([eee])
+]
+
+export Expr: ({ kind: "symbol", value: "add" } | { kind: "int", value: string } | { kind: "sexpr", sexpr: SExpr }) = [ 
+    <sexpr: SExpr> => ({ kind: "sexpr", sexpr: sexpr }),
+    <str: "add"> => ({ kind: "symbol", value: str }),
+    <int: r"[1-9][0-9]+"> => ({ kind: "int", value: int })
+]

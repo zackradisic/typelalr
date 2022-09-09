@@ -402,6 +402,7 @@ export type Token =
                     write!(w, "U.PopNStackWithValue<symbolStack, {}> extends [infer newStack, infer poppedValues]", self.pop_amount)
                 },
                 |w| {
+                    // w.write_str("symbolStack")?;
                     self.popped_values(w, self.call_impl()?, self.action_impl.production_idx)?;
 
                     Ok(())
@@ -704,7 +705,37 @@ mod test {
         lalr.parse("(add (add add))");
 
         let (lex, str) = generate(&bump, &ast, &lalr).unwrap();
-        // std::fs::write("./ts/parse_state.gen.ts", str).unwrap();
-        // std::fs::write("./ts/lex_state.gen.ts", lex).unwrap();
+        std::fs::write("./ts/parse_state2.gen.ts", str).unwrap();
+        std::fs::write("./ts/lex_state.gen.ts", lex).unwrap();
+    }
+
+    #[test]
+    fn god_help_me() {
+        let grammar_str = r#"
+        export start SExpr: ({ kind: "SExpr", exprs: Exprs }) = [
+            "(" <exprs: Exprs> ")" => ({ kind: "SExpr", exprs: exprs })
+        ]
+
+        export Exprs: (Expr[]) = [
+            <eee: Expr> <es: Exprs> => ([eee, ...es]),
+            <eee: Expr> => ([eee])
+        ]
+
+        export Expr: ({ kind: "symbol", value: "add" } | { kind: "int", value: string } | { kind: "sexpr", sexpr: SExpr }) = [ 
+            <sexpr: SExpr> => ({ kind: "sexpr", sexpr: sexpr }),
+            <str: "add"> => ({ kind: "symbol", value: str }),
+            <int: r"[1-9][0-9]+"> => ({ kind: "int", value: int })
+        ]
+    "#;
+        let bump = Bump::new();
+        let ast = parse_grammar(&bump, grammar_str);
+        let grammar = Grammar::grammar_from_ast_productions(&bump, &ast);
+
+        let lalr = Lalr::new(grammar);
+        lalr.parse("(add (add add))");
+
+        let (lex, str) = generate(&bump, &ast, &lalr).unwrap();
+        std::fs::write("./ts/parse_state2.gen.ts", str).unwrap();
+        std::fs::write("./ts/lex_state.gen.ts", lex).unwrap();
     }
 }

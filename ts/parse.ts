@@ -1,4 +1,4 @@
-import { type_defs, actions } from "./parse_state.gen";
+import { type_defs, actions } from "./parse_state2.gen";
 import * as U from "./util";
 import * as L from "./lex";
 
@@ -58,6 +58,73 @@ type TokenIndicesImpl<
     : "error: `head` is not a lexer token"
   : ret;
 
+type ParseImplShift<
+  newStateIdx extends number,
+  tokenInputs extends L.Token[],
+  input extends number[],
+  stack extends number[],
+  i extends number,
+  a extends number,
+  symbolStack extends type_defs.Symbol[],
+  maxRecursionDepth extends number
+> = NextToken<a, i, input> extends infer nextTok extends [
+  newA: number,
+  newI: number
+]
+  ? ParseImpl<
+      tokenInputs,
+      input,
+      [newStateIdx, ...stack],
+      nextTok[1],
+      nextTok[0],
+      [
+        { kind: "token"; token: tokenInputs[i]; lmao: newStateIdx },
+        ...symbolStack
+      ],
+      U.Pred<maxRecursionDepth>
+    >
+  : "error: todo fill this out"; /* NextToken<a, i, input>*/ // else it's an error so return it
+
+type ParseImplReduce<
+  ruleIdx extends number,
+  production extends type_defs.Production,
+  tokenInputs extends L.Token[],
+  input extends number[],
+  stack extends number[],
+  i extends number,
+  a extends number,
+  symbolStack extends type_defs.Symbol[],
+  maxRecursionDepth extends number
+> = U.PopNStack<stack, production["tokens"]["length"]> extends infer newStack
+  ? newStack extends [number, ...infer newRestOfStack]
+    ? GetGoto<
+        newStack[0],
+        production["name"]
+      > extends infer goto_ta extends number
+      ? newRestOfStack extends number[]
+        ? actions.EmitProduction<
+            ruleIdx,
+            symbolStack
+          > extends infer newSymbolStack extends type_defs.Symbol[]
+          ? ParseImpl<
+              tokenInputs,
+              input,
+              [goto_ta, newStack[0], ...newRestOfStack],
+              i,
+              a,
+              newSymbolStack,
+              U.Pred<maxRecursionDepth>
+            >
+          : [
+              `error state=${stack[0]} a=${a}`,
+              actions.EmitProduction<ruleIdx, symbolStack>,
+              symbolStack
+            ] //actions.EmitProduction<ruleIdx, symbolStack> //symbolStack // 'error' // [stack, newSymbolStack]
+        : "unreachable: `newRestOfStack` should always be a number[]"
+      : "not good" // goto_ta // else it's an error message so return it
+    : "unreachable: `newStack` is always a number"
+  : "unreachable: inferring `newStack` never fails";
+
 type ParseImpl<
   tokenInputs extends L.Token[],
   input extends number[],
@@ -70,60 +137,31 @@ type ParseImpl<
   ? "exceeded max recursion depth"
   : stack extends [infer top, ...infer _restOfStack]
   ? GetAction<top, a> extends infer action
-    ? action extends { shift: infer newStateIdx }
-      ? newStateIdx extends number
-        ? NextToken<a, i, input> extends [infer newA, infer newI]
-          ? newI extends number
-            ? newA extends number
-              ? ParseImpl<
-                  tokenInputs,
-                  input,
-                  [newStateIdx, ...stack],
-                  newI,
-                  newA,
-                  [
-                    { kind: "token"; token: tokenInputs[i]; lmao: newStateIdx },
-                    ...symbolStack
-                  ],
-                  U.Pred<maxRecursionDepth>
-                >
-              : `unreachable: \`newA\` should be a number here (${newI})`
-            : "unreachable: `newI` should be a number here"
-          : "error: todo fill this out" /* NextToken<a, i, input>*/ // else it's an error so return it
-        : "error: `newStateIdx` is not a number"
+    ? action extends { shift: number }
+      ? ParseImplShift<
+          action["shift"],
+          tokenInputs,
+          input,
+          stack,
+          i,
+          a,
+          symbolStack,
+          maxRecursionDepth
+        >
       : action extends { reduce: infer ruleIdx }
       ? ruleIdx extends keyof type_defs.Productions
         ? type_defs.Productions[ruleIdx] extends infer production extends type_defs.Production
-          ? U.PopNStack<
+          ? ParseImplReduce<
+              ruleIdx,
+              production,
+              tokenInputs,
+              input,
               stack,
-              production["tokens"]["length"]
-            > extends infer newStack
-            ? newStack extends [infer newTop, ...infer newRestOfStack]
-              ? newTop extends number
-                ? GetGoto<newTop, production["name"]> extends infer goto_ta
-                  ? goto_ta extends number
-                    ? newRestOfStack extends number[]
-                      ? actions.EmitProduction<
-                          ruleIdx,
-                          symbolStack
-                        > extends infer newSymbolStack extends type_defs.Symbol[]
-                        ? ParseImpl<
-                            tokenInputs,
-                            input,
-                            [goto_ta, newTop, ...newRestOfStack],
-                            i,
-                            a,
-                            // symbolStack,
-                            newSymbolStack,
-                            U.Pred<maxRecursionDepth>
-                          >
-                        : ['error', stack] //actions.EmitProduction<ruleIdx, symbolStack> //symbolStack // 'error' // [stack, newSymbolStack]
-                      : "unreachable: `newRestOfStack` should always be a number[]"
-                    : goto_ta // else it's an error message so return it
-                  : "unreachable: inferring goto_ta never fails"
-                : "unreachable: `newTop` should be a number here"
-              : "unreachable: `newStack` is always a number"
-            : "unreachable: inferring `newStack` never fails"
+              i,
+              a,
+              symbolStack,
+              maxRecursionDepth
+            >
           : "unreachable: `Productions[ruleIdx]` is not a production"
         : "error: `ruleIdx` is not a key in `Productions`"
       : action extends { accept: true }
@@ -141,26 +179,96 @@ type Parse<tokenInputs extends L.Token[]> =
       : "error: `input` should always be a number[] or string"
     : "unreachable: inferring `input` never fails";
 
-type tokens = L.Lex<"(add (add add))">;
-// type wtf = Parse<tokens>
+type tokens = L.Lex<"(add 420 420 420 420)">;
+type wtf = Parse<tokens>;
 
-type tokenIndices = TokenIndices<tokens>
+type bruh = wtf[0]["value"]["exprs"][0];
+type lol = wtf[0]["value"]["exprs"][0]["kind"]; // extends { kind: "symbol", value: "add"} ? "NICE" : "NOT NICE"
+
+// type arr = [{
+//   kind: "Exprs";
+//   value: [{
+//       kind: "symbol";
+//       value: "add";
+//   }];
+// }, {
+//   kind: "Expr";
+//   value: {
+//       kind: "symbol";
+//       value: "add";
+//   };
+// }, {
+//   kind: "token";
+//   token: {
+//       kind: "(";
+//       value: "(";
+//   };
+//   lmao: 2;
+// }]
+
+// type tokenIndices = TokenIndices<tokens>;
 // type help = ParseImpl<tokens, TokenIndices<tokens>, [0], 0, tokenIndices[0], [], 50>
-type help = ParseImpl<tokens, TokenIndices<tokens>, [11, 6, 2, 0], 7, 0, [
-  {
-    kind: "token",
-    token: { kind: ")", value: ")"},
-  },
-  { kind: "Expr", value: { kind: "int", value: "420" }},
-  // { 
-  //   kind: "Exprs", 
-  //   value: [
-  //     { kind: "sexpr", sexpr: { kind: "SExpr", exprs: [ { kind: "symbol", value: "add" }, { kind: "symbol", value: "add" } ] }},
-  //     { kind: "symbol", value: "add" }
-  //   ]
-  // },
-  {
-    kind: "token",
-    token: { kind: "(", value: "("},
-  },
-], 50>
+// type help = ParseImpl<
+//   tokens,
+//   TokenIndices<tokens>,
+//   [11, 6, 2, 0],
+//   7,
+//   0,
+//   [
+//     {
+//       kind: "token";
+//       token: { kind: ")"; value: ")" };
+//     },
+//     // { kind: "Expr"; value: { kind: "int"; value: "420" } },
+//     {
+//       kind: "Exprs",
+//       value: [
+//         { kind: "sexpr", sexpr: { kind: "SExpr", exprs: [ { kind: "symbol", value: "add" }, { kind: "symbol", value: "add" } ] }},
+//         { kind: "symbol", value: "add" }
+//       ]
+//     },
+//     {
+//       kind: "token";
+//       token: { kind: "("; value: "(" };
+//     }
+//   ],
+//   50
+// >;
+
+type tokenIndices = TokenIndices<tokens>;
+// type help = ParseImpl<tokens, TokenIndices<tokens>, [0], 0, tokenIndices[0], [], 50>
+type help = ParseImpl<
+  tokens,
+  TokenIndices<tokens>,
+  [11, 6, 2, 0],
+  7,
+  0,
+  [
+    {
+      kind: "token";
+      token: { kind: ")"; value: ")" };
+    },
+    // { kind: "Expr"; value: { kind: "int"; value: "420" } },
+    {
+      kind: "Exprs";
+      value: [
+        {
+          kind: "sexpr";
+          sexpr: {
+            kind: "SExpr";
+            exprs: [
+              { kind: "symbol"; value: "add" },
+              { kind: "symbol"; value: "add" }
+            ];
+          };
+        },
+        { kind: "symbol"; value: "add" }
+      ];
+    },
+    {
+      kind: "token";
+      token: { kind: "("; value: "(" };
+    }
+  ],
+  50
+>;
