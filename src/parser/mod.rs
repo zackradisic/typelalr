@@ -61,7 +61,10 @@ impl<'ast> Grammar<'ast> {
         let mut production_name_map: BTreeMap<Ident, Vec<ProductionIdx>> = BTreeMap::new();
         let mut productions = Vec::new();
 
-        let start_symbol = ast_productions.iter().find(|prod| prod.is_start).unwrap();
+        let start_symbol = ast_productions
+            .iter()
+            .find(|prod| prod.is_start)
+            .expect("Expect start production.");
         let augmented_start_name = Ident(bump.alloc(format!("{}'", start_symbol.name)));
 
         production_name_map.insert(
@@ -113,6 +116,7 @@ impl<'ast> Grammar<'ast> {
         self.productions.iter()
     }
 
+    /// Iterate all the productions that produce the non-terminal of the given name
     pub fn production_iter(&'ast self, name: Ident<'ast>) -> ProductionIter<'ast> {
         ProductionIter {
             production_indices: self.production_name_map.get(&name).unwrap(),
@@ -141,14 +145,11 @@ impl<'ast> Grammar<'ast> {
         &self,
     ) -> std::iter::FilterMap<
         std::iter::Enumerate<std::slice::Iter<Symbol<'ast>>>,
-        for<'a> fn((usize, &'a Symbol<'ast>)) -> Option<(TokenIdx, &'a Symbol<'ast>)>,
+        for<'a> fn((usize, &'a Symbol<'ast>)) -> Option<(TokenIdx, &'a Ident<'ast>)>,
     > {
         self.tokens.iter().enumerate().filter_map(|(i, tok)| {
-            if !tok.is_terminal() {
-                Some((TokenIdx(i as u32), tok))
-            } else {
-                None
-            }
+            tok.as_non_terminal()
+                .map(|non_terminal| (TokenIdx(i as u32), non_terminal))
         })
     }
 

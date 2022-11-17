@@ -17,14 +17,23 @@ pub struct ProductionIdx(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TokenIdx(pub u32);
 
-/// An LR(1) item.
+/// An LR(0) item.
 ///
 /// First value represents the grammar production, second represents
 /// the position of the dot.
+///
+/// Ex: E' -> . E + T
+/// First value refers to the index in the production vec of the grammar
+/// Second value will be 0
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Item(ProductionIdx, u32);
 
-/// LR(1) set of items
+/// Set of LR(1) items
+///
+/// Each LR(0) contains a set of lookahead tokens that are expected to appear after
+/// them, making them LR(1)
+///
+/// Conceptually a set of LR(1) items represents a DFA state of the parser
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ItemSet(BTreeMap<Item, BTreeSet<TokenIdx>>);
 
@@ -78,6 +87,7 @@ impl Item {
         production.input_tokens.last().unwrap()
     }
 
+    /// If the dot of this item precedes a production, return that production's name name
     fn dot_production_name<'ast>(self, grammar: &'ast Grammar<'ast>) -> Option<Ident<'ast>> {
         let this_production: &Production = grammar.get_production(self.production_idx()).unwrap();
 
@@ -163,7 +173,8 @@ impl ItemSet {
         }
     }
 
-    fn initial_items<'ast>() -> Self {
+    /// Initial set of items is the augmented start production with an EOF lookahead token
+    fn initial<'ast>() -> Self {
         let augmented_start_item = Item(Grammar::AUGMENTED_START_PRODUCTION_IDX, 0);
         Self(BTreeMap::from_iter([(
             augmented_start_item,
@@ -171,20 +182,19 @@ impl ItemSet {
         )]))
     }
 
+    /// Return set of all valid LR(1) item sets
     pub fn items<'ast>(grammar: &'ast Grammar<'ast>) -> IndexSet<Self> {
-        fn compute_hash(item_set: &ItemSet) -> u64 {
-            let mut hasher = DefaultHasher::new();
-            item_set.hash(&mut hasher);
-            hasher.finish()
-        }
-
-        let mut initial_items = Self::initial_items();
+        // Starting set is the closure of the initial LR(1) item
+        let mut initial_items = Self::initial();
         initial_items.closure(grammar);
 
-        let mut hash_stack = vec![compute_hash(&initial_items)];
         let mut c = IndexSet::from_iter([initial_items]);
+        // We can't mutate and iterate `c` at the same time so we
+        // double buffer it witht his temp stack
         let mut temp = Vec::new();
 
+        // Now compute every possible LR(1) set by adding the result of `goto` in each
+        // LR(1) set in `c`
         loop {
             for item_set in c.iter() {
                 for grammar_symbol in grammar.tokens() {
@@ -201,7 +211,6 @@ impl ItemSet {
 
             while !temp.is_empty() {
                 let item_set = temp.pop().unwrap();
-                hash_stack.push(compute_hash(&item_set));
                 c.insert(item_set);
             }
         }
@@ -212,13 +221,16 @@ impl ItemSet {
     fn closure<'ast>(&mut self, grammar: &'ast Grammar<'ast>) {
         let mut to_be_added: Vec<(Item, TokenIdx)> = Vec::new();
         loop {
+            // For each [A -> 𝑎.Bβ, 𝑎]
             for (item, lookahead_set) in self.0.iter_mut() {
                 let production_name = match item.dot_production_name(grammar) {
                     Some(prod_name) => prod_name,
                     None => continue,
                 };
 
+                // For each B -> 𝛾
                 for (prod_idx, _prod) in grammar.production_iter(production_name) {
+                    // For each 𝑏 in FIRST(β𝑎) add [B -> .𝛾, 𝑏] to the set
                     for lookahead in lookahead_set.iter() {
                         let β𝑎 = item
                             .increment()
@@ -257,9 +269,11 @@ impl ItemSet {
         }
     }
 
+    /// Compute the transition state for this state under input X
     pub fn goto<'ast>(&self, x: &Symbol, grammar: &'ast Grammar<'ast>) -> Self {
         let mut j = BTreeMap::<Item, BTreeSet<TokenIdx>>::default();
 
+        // For each [A -> a.xβ, 𝑎] add [A -> ax.β, 𝑎]
         for (item, lookahead_set) in self.0.iter() {
             let input_token = match item.dot_token(grammar) {
                 Some(input_token) => input_token,
@@ -278,6 +292,7 @@ impl ItemSet {
             }
         }
 
+        // Then compute closure over new set
         let mut ret = Self(j);
         ret.closure(grammar);
 
@@ -399,13 +414,13 @@ mod test {
     #[test]
     fn test() {
         let grammar_str = r#"
-            export start Foo = [ 
+            export start Foo: () = [ 
                 "hello" "how" "are" "you" => ({ hello: "sir" }),
                 r"[0-9]+" => ({ hello: "sir" }),
                 <bruh: Bruh> => ("noice")
             ]
 
-            export Bruh = [
+            export Bruh: () = [
                 "noice" => ("lmao")
             ]
         "#;
@@ -429,11 +444,11 @@ mod test {
     #[test]
     fn closure() {
         let grammar_str = r#"
-            export start S = [ 
+            export start S: () = [ 
                 <c1: C> <c2: C> => ("nothing to see here")
             ]
 
-            export C = [
+            export C: () = [
                 "c" <c: C> => ("OK"),
                 "d" => ("noob")
             ]
@@ -443,7 +458,7 @@ mod test {
         let ast = parse_grammar(&bump, grammar_str);
         let grammar = Grammar::grammar_from_ast_productions(&bump, &ast);
 
-        let mut initial_items = ItemSet::initial_items();
+        let mut initial_items = ItemSet::initial();
         initial_items.closure(&grammar);
 
         // for (item, lookaheads) in &initial_items.0.iter() {}
@@ -485,11 +500,11 @@ mod test {
     #[test]
     fn items() {
         let grammar_str = r#"
-            export start S = [ 
+            export start S: () = [ 
                 <c1: C> <c2: C> => ("nothing to see here")
             ]
 
-            export C = [
+            export C: () = [
                 "c" <c: C> => ("OK"),
                 "d" => ("noob")
             ]

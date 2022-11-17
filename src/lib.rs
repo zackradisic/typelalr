@@ -28,7 +28,7 @@ mod test {
     #[test]
     fn basic() {
         let grammar_str = r#"
-            export Foo = [ 
+            export start Foo: () = [ 
                 "hello" "how" "are" "you" => ({ hello: "sir" }),
                 r"[0-9]+" => ({ hello: "sir" }),
             ]

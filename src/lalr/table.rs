@@ -75,13 +75,11 @@ impl<K, V> Deref for Table<K, V> {
 pub fn make_tables<'ast>(
     grammar: &Grammar<'ast>,
 ) -> (ActionTable, GotoTable<'ast>, IndexSet<ItemSet>) {
+    // Create the LR(1) set of items so we can create our parsing tables
     let lr_items = ItemSet::items(grammar);
 
+    // Merge LR(1) sets with same cores
     let (lalr_set, lr_to_lalr) = merge_cores(&lr_items);
-
-    // for (i, item_set) in lalr_set.iter().enumerate() {
-    //     println!("{} {:#?}", i, ItemSetDebug(item_set, &grammar));
-    // }
 
     let (action, goto) = make_lalr_tables(grammar, &lalr_set, &lr_items, &lr_to_lalr);
 
@@ -111,14 +109,6 @@ pub fn make_lalr_tables<'ast>(
         let lr_idx = match lr_sets.get_index_of(&goto_ia) {
             Some(i) => i,
             None => {
-                // println!(
-                //     "({}) - LR(1) => {:?}: Didn't work: {:#?}",
-                //     i,
-                //     lalr_sets.get_index_of(&goto_ia),
-                //     goto_ia.debug(grammar)
-                // );
-                // return None;
-                // TODO: This might not be correct
                 return lalr_sets.get_index_of(&goto_ia);
             }
         };
@@ -129,9 +119,11 @@ pub fn make_lalr_tables<'ast>(
         for (item, lookaheads) in item_set.iter() {
             let dot_value = item.dot_token(grammar);
 
-            // A dot value of Some(Symbol) means the dot is not at the end
-            // Otherwise we are at the end of the production, ex/ S ⇒  C C⋅
+            // A dot value of Some(Symbol) means the dot is not at the end of the production
             if let Some(dot_value) = dot_value {
+                // If the terminal brings us to a new state then add action to shift to the new state:
+                // If [A -> α.𝑎β, b] and GOTO(item_set, 𝑎) = new_item_set_idx
+                // then set ACTION[item_set_idx, 𝑎] = Shift(new_item_set_idx)
                 if dot_value.is_terminal() {
                     let token_idx = grammar.get_token_idx(dot_value).unwrap();
                     let goto_idx = compute_goto(
@@ -150,8 +142,10 @@ pub fn make_lalr_tables<'ast>(
                 }
                 continue;
             }
+            // At this point we are at the end of the production, ex/ S ⇒  C C⋅
 
             for lookahead in lookaheads {
+                // We have reached the end, set action to accept
                 if *lookahead == Grammar::EOF_TOKEN_IDX
                     && item.production_idx() == Grammar::AUGMENTED_START_PRODUCTION_IDX
                 {
@@ -169,6 +163,7 @@ pub fn make_lalr_tables<'ast>(
                     continue;
                 }
 
+                // Otherwise we reduce the production
                 match action.entry((i as u32, *lookahead)) {
                     Entry::Vacant(entry) => entry.insert(Action::Reduce(item.production_idx())),
                     Entry::Occupied(_) => panic!("Conflict ({}, {:?})", i, lookahead),
@@ -177,24 +172,12 @@ pub fn make_lalr_tables<'ast>(
         }
     }
 
-    let token_idx_to_production_name = grammar
-        .tokens()
-        .enumerate()
-        .filter_map(|(token_idx, symbol)| {
-            symbol
-                .as_non_terminal()
-                .map(|t| (TokenIdx(token_idx as u32), *t))
-        })
-        .fold(BTreeMap::new(), |mut map, (token_idx, prod_name)| {
-            map.insert(token_idx, prod_name);
-            map
-        });
-
     for (i, state) in lalr_sets.iter().enumerate() {
-        for (token_idx, non_terminal_name) in grammar.non_terminals() {
-            let production_name = token_idx_to_production_name.get(&token_idx).unwrap();
-            let goto_ia = state.goto(non_terminal_name, grammar);
+        for (_token_idx, production_name) in grammar.non_terminals() {
+            let goto_ia = state.goto(&Symbol::NonTerminal(*production_name), grammar);
 
+            // lalr state = I1 U I2 U ... etc where the I's are lr(1) states with same core merged
+            // so we much check if goto_ia == lalr state, or
             match lr_sets.get_index_of(&goto_ia) {
                 Some(j) => {
                     goto.insert(
@@ -215,18 +198,28 @@ pub fn make_lalr_tables<'ast>(
     (action, goto)
 }
 
-pub fn merge_cores(lalr_sets: &IndexSet<ItemSet>) -> (IndexSet<ItemSet>, BTreeMap<usize, usize>) {
-    let mut presence_vec = BitVec::from_elem(lalr_sets.len(), true);
+/// A "core" of an LR(1) item set is the set of all the first components of all LR(1) items in the set:
+/// I4: [C ->  d., c/d] the core is { C -> d. }
+
+/// I3: [C -> c.C, c/d] the core is { C -> c. C, C -> .cC, C -> .d }
+///     [C -> .cC, c/d]
+///     [C ->  .d, c/d]
+///
+/// I7: [C ->  d.,   $] the core is { C -> d. }
+///
+/// I4 and I7 have the same core so we merge them
+pub fn merge_cores(lr_sets: &IndexSet<ItemSet>) -> (IndexSet<ItemSet>, BTreeMap<usize, usize>) {
+    let mut presence_vec = BitVec::from_elem(lr_sets.len(), true);
     let mut core_hash_to_index = IndexMap::<u64, Vec<usize>>::new();
 
-    for (i, set) in lalr_sets.iter().enumerate() {
+    for (i, set) in lr_sets.iter().enumerate() {
         core_hash_to_index
             .entry(set.core_hash())
             .or_insert_with(Vec::new)
             .push(i);
     }
 
-    let mut lalr_sets = lalr_sets
+    let mut lalr_sets = lr_sets
         .into_iter()
         .map(|set| ManuallyDrop::new(set.clone()))
         .collect();
@@ -302,11 +295,11 @@ mod test {
     #[test]
     fn merging() {
         let grammar_str = r#"
-            export start S = [ 
+            export start S: () = [ 
                 <c1: C> <c2: C> => ("nothing to see here")
             ]
 
-            export C = [
+            export C: () = [
                 "c" <c: C> => ("OK"),
                 "d" => ("noob")
             ]
@@ -328,11 +321,11 @@ mod test {
     #[test]
     fn tables() {
         let grammar_str = r#"
-            export start S = [ 
+            export start S: () = [ 
                 <c1: C> <c2: C> => ("nothing to see here")
             ]
 
-            export C = [
+            export C: () = [
                 "c" <c: C> => ("OK"),
                 "d" => ("noob")
             ]

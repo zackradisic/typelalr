@@ -179,7 +179,7 @@ type Parse<tokenInputs extends L.Token[]> =
       : "error: `input` should always be a number[] or string"
     : "unreachable: inferring `input` never fails";
 
-type tokens = L.Lex<"(add 420 420 420 420)">;
+type tokens = L.Lex<"(add (add 420 420))">;
 type wtf = Parse<tokens>;
 
 type bruh = wtf[0]["value"]["exprs"][0];

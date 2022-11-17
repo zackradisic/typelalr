@@ -46,6 +46,7 @@ impl Token {
 #[derive(Debug, Clone)]
 pub struct Lex {
     pub(crate) dfa: DFA,
+    // TODO: Can these be vectors?
     pub(crate) tokens: BTreeMap<StateIdx, TokenDef>,
     pub(crate) accepting_dfa_to_nfa: BTreeMap<StateIdx, Vec<StateIdx>>,
 }
@@ -312,6 +313,14 @@ mod test {
         let toks = lexer.lex("cdd");
         println!("TOKS: {:#?}", toks);
     }
+
+    // #[test]
+    // fn noob() {
+    //     let tokens = vec![new_token_val("for", "for"), new_token_val("identifier", "[a-z]+")];
+    //     let lexer = Lex::from_tokens(tokens);
+    //     let toks = lexer.lex("forest");
+    //     println!("TOKS: {:#?}", toks);
+    // }
 
     #[test]
     fn string() {

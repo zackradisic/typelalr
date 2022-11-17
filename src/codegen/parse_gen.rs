@@ -702,11 +702,11 @@ mod test {
         let grammar = Grammar::grammar_from_ast_productions(&bump, &ast);
 
         let lalr = Lalr::new(grammar);
-        lalr.parse("(add (add add))");
+        lalr.parse("(add (add 420 420))");
 
         let (lex, str) = generate(&bump, &ast, &lalr).unwrap();
-        std::fs::write("./ts/parse_state2.gen.ts", str).unwrap();
-        std::fs::write("./ts/lex_state.gen.ts", lex).unwrap();
+        // std::fs::write("./ts/parse_state2.gen.ts", str).unwrap();
+        // std::fs::write("./ts/lex_state.gen.ts", lex).unwrap();
     }
 
     #[test]

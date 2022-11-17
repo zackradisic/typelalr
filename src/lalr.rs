@@ -196,16 +196,16 @@ mod test {
     #[test]
     fn basic_ops() {
         let grammar_str = r#"
-            export start Exprs = [
+            export start Exprs: () = [
                 Expr Expr => ("nice"),
                 Expr => ("also nice")
             ]
 
-            export Expr = [ 
+            export Expr: () = [ 
                 <int: Int> => ({ kind: "int", int })
             ]
 
-            export Int = [
+            export Int: () = [
                 r"[1-9][0-9]*" => ("lol")
             ]
         "#;
@@ -234,21 +234,21 @@ mod test {
     #[test]
     fn basic_ops2() {
         let grammar_str = r#"
-            export start Exprs = [
+            export start Exprs: () = [
                 Expr Exprs => ("nice"),
                 Expr => ("also nice")
             ]
 
-            export Expr = [ 
+            export Expr: () = [ 
                 <int: Int> => ({ kind: "int", int }),
                 <str: String> => ({ kind: "str", str }),
             ]
 
-            export Int = [
+            export Int: () = [
                 r"[1-9][0-9]*" => ("lol")
             ]
 
-            export String = [
+            export String: () = [
                 r"'[^']*'" => ("lol")
             ]
         "#;
@@ -269,25 +269,25 @@ mod test {
     #[test]
     fn lisp() {
         let grammar_str = r#"
-            export start SExpr = [
+            export start SExpr: () = [
                 "(" <exprs: Exprs> ")" => ("LMAO")
             ]
 
-            export Exprs = [
+            export Exprs: () = [
                 Expr Exprs => ("nice"),
                 Expr => ("also nice")
             ]
 
-            export Expr = [ 
+            export Expr: () = [ 
                 <int: Int> => ({ kind: "int", int }),
                 <str: Symbol> => ({ kind: "str", str }),
             ]
 
-            export Int = [
+            export Int: () = [
                 r"[1-9][0-9]*" => ("lol")
             ]
 
-            export Symbol = [
+            export Symbol: () = [
                 r"[^() ]*" => ("lol")
             ]
         "#;
