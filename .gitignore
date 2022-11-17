@@ -1,3 +1,5 @@
 /target
 /Cargo.lock
 /ts/*.gen.ts
+!/ts/parse_state2.gen.ts
+!/ts/lex_state.gen.ts

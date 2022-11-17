@@ -10,5 +10,5 @@ export Exprs: (Expr[]) = [
 export Expr: ({ kind: "symbol", value: "add" } | { kind: "int", value: string } | { kind: "sexpr", sexpr: SExpr }) = [ 
     <sexpr: SExpr> => ({ kind: "sexpr", sexpr: sexpr }),
     <str: "add"> => ({ kind: "symbol", value: str }),
-    <int: r"[1-9][0-9]+"> => ({ kind: "int", value: int })
+    <int: r"[1-9]+[0-9]*"> => ({ kind: "int", value: int })
 ]

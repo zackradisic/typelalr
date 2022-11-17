@@ -724,7 +724,7 @@ mod test {
         export Expr: ({ kind: "symbol", value: "add" } | { kind: "int", value: string } | { kind: "sexpr", sexpr: SExpr }) = [ 
             <sexpr: SExpr> => ({ kind: "sexpr", sexpr: sexpr }),
             <str: "add"> => ({ kind: "symbol", value: str }),
-            <int: r"[1-9][0-9]+"> => ({ kind: "int", value: int })
+            <int: r"[1-9]+[0-9]*"> => ({ kind: "int", value: int })
         ]
     "#;
         let bump = Bump::new();
@@ -732,7 +732,7 @@ mod test {
         let grammar = Grammar::grammar_from_ast_productions(&bump, &ast);
 
         let lalr = Lalr::new(grammar);
-        lalr.parse("(add (add add))");
+        lalr.parse("(add 420 (add 34 35))");
 
         let (lex, str) = generate(&bump, &ast, &lalr).unwrap();
         std::fs::write("./ts/parse_state2.gen.ts", str).unwrap();

@@ -193,6 +193,7 @@ mod test {
         let _noob = lalr.parse("cdd");
     }
 
+    // TODO: FINISH
     #[test]
     fn basic_ops() {
         let grammar_str = r#"
@@ -232,6 +233,40 @@ mod test {
     }
 
     #[test]
+    fn gold_help_me() {
+        let grammar_str = r#"
+        export start SExpr: ({ kind: "SExpr", exprs: Exprs }) = [
+            "(" <exprs: Exprs> ")" => ({ kind: "SExpr", exprs: exprs })
+        ]
+
+        export Exprs: (Expr[]) = [
+            <eee: Expr> <es: Exprs> => ([eee, ...es]),
+            <eee: Expr> => ([eee])
+        ]
+
+        export Expr: ({ kind: "symbol", value: "add" } | { kind: "int", value: string } | { kind: "sexpr", sexpr: SExpr }) = [ 
+            <sexpr: SExpr> => ({ kind: "sexpr", sexpr: sexpr }),
+            <str: "add"> => ({ kind: "symbol", value: str }),
+            <int: r"[1-9][0-9]+"> => ({ kind: "int", value: int })
+        ]
+    "#;
+
+        let bump = Bump::new();
+        let ast = parse_grammar(&bump, grammar_str);
+        let grammar = Grammar::grammar_from_ast_productions(&bump, &ast);
+
+        // println!(
+        //     "TOKENS: {:#?}",
+        //     grammar.tokens().enumerate().collect::<Vec<_>>()
+        // );
+
+        let lalr = Lalr::new(grammar);
+
+        let _noob = lalr.parse("(add 420 (add 34 35))");
+    }
+
+    // TODO: FINISH
+    #[test]
     fn basic_ops2() {
         let grammar_str = r#"
             export start Exprs: () = [
@@ -266,6 +301,7 @@ mod test {
         let _noob = lalr.parse("42 420 69 9001");
     }
 
+    // TODO: FINISH
     #[test]
     fn lisp() {
         let grammar_str = r#"
